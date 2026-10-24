@@ -6,7 +6,8 @@ import Observation
 final class GameModel {
     private(set) var game: Game
     private(set) var selected: Int?
-    private(set) var shake: BoardState.Shake?
+    private(set) var shake: BoardState.Pulse?
+    private(set) var hint: BoardState.Pulse?
     @ObservationIgnored private let store: GameStore?
 
     init() {
@@ -20,26 +21,35 @@ final class GameModel {
     }
 
     var boardState: BoardState {
-        BoardState(
-            dealSeed: game.deal.seed, layout: game.board.layout, faces: game.board.faces,
-            present: game.board.present, selected: selected, shake: shake)
+        let board = game.board
+        var free = TileMask(count: board.faces.count, allPresent: false)
+        board.freeTiles().forEach { free.insert($0) }
+        return BoardState(
+            dealSeed: game.deal.seed, layout: board.layout, faces: board.faces,
+            present: board.present, free: free, selected: selected, shake: shake, hint: hint)
     }
 
     /// Handles a tap on a tile: select it, match it with the selection, or
     /// shake it if it's blocked.
     func tap(_ index: Int) {
-        let board = game.board
-        guard board.present[index] else { return }
-        guard board.isFree(index) else {
-            shake = BoardState.Shake(index: index, serial: (shake?.serial ?? 0) + 1)
-            return
+        switch game.board.outcome(ofTapping: index, selected: selected) {
+        case .ignored:
+            break
+        case .blocked:
+            shake = BoardState.Pulse(tiles: [index], serial: (shake?.serial ?? 0) + 1)
+        case .select(let i):
+            selected = i
+        case .deselect:
+            selected = nil
+        case .match(let pair):
+            selected = nil
+            update { $0.remove(pair) }
         }
-        if let selected, selected != index, board.faces[selected].matches(board.faces[index]) {
-            self.selected = nil
-            update { $0.remove(TilePair(selected, index)) }
-        } else {
-            selected = selected == index ? nil : index
-        }
+    }
+
+    /// Briefly highlights a pair, for the Hint button.
+    func pulse(_ pair: TilePair) {
+        hint = BoardState.Pulse(tiles: [pair.a, pair.b], serial: (hint?.serial ?? 0) + 1)
     }
 
     func undo() {

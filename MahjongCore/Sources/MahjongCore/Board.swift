@@ -65,3 +65,27 @@ public struct Board: Sendable {
         present.insert(pair.b)
     }
 }
+
+extension Board {
+    /// What tapping a tile should do, given the current selection.
+    public enum TapOutcome: Equatable, Sendable {
+        /// The tile is gone; nothing happens.
+        case ignored
+        /// The tile can't be picked up yet.
+        case blocked
+        case select(Int)
+        case deselect
+        case match(TilePair)
+    }
+
+    public func outcome(ofTapping index: Int, selected: Int?) -> TapOutcome {
+        guard present[index] else { return .ignored }
+        guard isFree(index) else { return .blocked }
+        guard let selected, present[selected] else { return .select(index) }
+        if selected == index {
+            return .deselect
+        }
+        let pair = TilePair(selected, index)
+        return canRemove(pair) ? .match(pair) : .select(index)
+    }
+}

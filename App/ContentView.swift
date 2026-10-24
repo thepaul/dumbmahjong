@@ -5,10 +5,11 @@ import SwiftUI
 /// comes with #15.
 struct ContentView: View {
     let model: GameModel
+    @AppStorage("dimBlocked") private var dimBlocked = false
 
     var body: some View {
         VStack(spacing: 0) {
-            SpriteBoardView(state: model.boardState, tileset: .standard, onTap: model.tap)
+            SpriteBoardView(state: boardState, tileset: .standard, onTap: model.tap)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack(spacing: 20) {
@@ -29,6 +30,12 @@ struct ContentView: View {
             .padding(.vertical, 8)
         }
         .background(Color.felt)
+    }
+
+    private var boardState: BoardState {
+        var state = model.boardState
+        state.dimBlocked = dimBlocked
+        return state
     }
 }
 

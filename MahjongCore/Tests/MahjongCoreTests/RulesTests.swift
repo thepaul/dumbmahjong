@@ -80,3 +80,38 @@ import Testing
         #expect(b.present == TileMask(count: 4, allPresent: true))
     }
 }
+
+@Suite struct TapTests {
+    // A row of four: tiles 0 and 3 are free; 0 and 3 match, 1 and 2 match.
+    let board = Board(
+        geometry: LayoutGeometry(Layout(
+            id: "row", name: "Row", positions: (0..<4).map { Position(x: 2 * $0, y: 0, z: 0) })),
+        faces: [.seasonSpring, .dots2, .dots2, .seasonWinter])
+
+    @Test func selectingAndDeselecting() {
+        #expect(board.outcome(ofTapping: 0, selected: nil) == .select(0))
+        #expect(board.outcome(ofTapping: 0, selected: 0) == .deselect)
+    }
+
+    @Test func blockedTile() {
+        #expect(board.outcome(ofTapping: 1, selected: nil) == .blocked)
+        #expect(board.outcome(ofTapping: 1, selected: 0) == .blocked)
+    }
+
+    @Test func matching() {
+        #expect(board.outcome(ofTapping: 3, selected: 0) == .match(TilePair(0, 3)))
+    }
+
+    @Test func nonMatchingFreeTileMovesSelection() {
+        let other = Board(geometry: board.geometry, faces: [.dots1, .dots2, .dots2, .dots3])
+        #expect(other.outcome(ofTapping: 3, selected: 0) == .select(3))
+    }
+
+    @Test func removedTileIsIgnored() {
+        var b = board
+        b.remove(TilePair(0, 3))
+        #expect(b.outcome(ofTapping: 0, selected: nil) == .ignored)
+        // A stale selection of a removed tile is dropped.
+        #expect(b.outcome(ofTapping: 1, selected: 0) == .select(1))
+    }
+}

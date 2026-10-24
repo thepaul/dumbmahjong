@@ -4,6 +4,9 @@ import UIKit
 
 /// 2.5D board: a fixed oblique view where each layer is shifted up and to the
 /// left, so every tile shows its thickness on its right and bottom sides.
+///
+/// The view is paused whenever nothing is animating, so an idle board costs no
+/// rendering. Anything that changes what's on screen must call `wake()`.
 @MainActor
 final class SpriteBoardScene: SKScene {
     var onTap: ((Int) -> Void)?
@@ -14,6 +17,7 @@ final class SpriteBoardScene: SKScene {
     private var drawOrder: [Int] = []
     private var tiles: [Int: TileNode] = [:]
     private var faceTextures: [Face: SKTexture] = [:]
+    private var idleFrames = 0
 
     private let board = SKNode()
 
@@ -35,22 +39,50 @@ final class SpriteBoardScene: SKScene {
         rebuild()
     }
 
+    override func update(_ currentTime: TimeInterval) {
+        if tiles.values.contains(where: \.isAnimating) {
+            idleFrames = 0
+        } else {
+            // Let a couple of frames render the final state before pausing.
+            idleFrames += 1
+            if idleFrames > 2 {
+                view?.isPaused = true
+            }
+        }
+    }
+
+    private func wake() {
+        idleFrames = 0
+        view?.isPaused = false
+    }
+
     func apply(_ new: BoardState) {
+        wake()
         let old = state
         state = new
         guard let old, old.dealSeed == new.dealSeed, old.layout == new.layout, old.faces == new.faces else {
             rebuild()
             return
         }
-        for i in new.layout.positions.indices where old.present[i] != new.present[i] {
-            tiles[i]?.setPresent(new.present[i], animated: true)
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        for i in new.layout.positions.indices {
+            guard let tile = tiles[i] else { continue }
+            if old.present[i] != new.present[i] {
+                tile.setPresent(new.present[i], animated: true, reduceMotion: reduceMotion)
+            }
+            tile.isDimmed = new.dimBlocked && !new.free[i]
         }
         if old.selected != new.selected {
             old.selected.map { tiles[$0]?.isSelected = false }
             new.selected.map { tiles[$0]?.isSelected = true }
         }
         if let shake = new.shake, shake != old.shake {
-            tiles[shake.index]?.shake(distance: (metrics?.tileWidth ?? 40) * 0.06)
+            for i in shake.tiles {
+                tiles[i]?.signalBlocked(distance: (metrics?.tileWidth ?? 40) * 0.06, reduceMotion: reduceMotion)
+            }
+        }
+        if let hint = new.hint, hint != old.hint {
+            hint.tiles.forEach { tiles[$0]?.pulseHint() }
         }
     }
 
@@ -99,6 +131,7 @@ final class SpriteBoardScene: SKScene {
     }
 
     private func rebuild() {
+        wake()
         board.removeAllChildren()
         tiles = [:]
         guard let state, size.width > 1, size.height > 1 else { return }
@@ -107,19 +140,19 @@ final class SpriteBoardScene: SKScene {
         drawOrder = BoardState.drawOrder(for: state.layout)
 
         let art = TileArtwork(metrics: metrics, scale: view?.contentScaleFactor ?? 3)
-        let body = SKTexture(image: art.body)
-        let highlight = SKTexture(image: art.highlight)
+        let textures = TileNode.Textures(
+            body: SKTexture(image: art.body), bodyAnchor: art.bodyAnchor,
+            selection: SKTexture(image: art.selection), hint: SKTexture(image: art.hint),
+            blockedFlash: SKTexture(image: art.blockedFlash), dim: SKTexture(image: art.dim),
+            faceSize: art.faceSize(aspect: tileset.info.faceAspect))
         for (rank, i) in drawOrder.enumerated() {
-            let face = state.faces[i]
-            let node = TileNode(
-                body: body, bodyAnchor: art.bodyAnchor, highlight: highlight,
-                face: faceTexture(face), faceSize: art.faceSize(aspect: tileset.info.faceAspect),
-                metrics: metrics)
+            let node = TileNode(textures: textures, face: faceTexture(state.faces[i]), metrics: metrics)
             let topLeft = metrics.topLeft(state.layout.positions[i])
             node.position = CGPoint(x: topLeft.x, y: size.height - topLeft.y)
             node.zPosition = CGFloat(rank)
-            node.setPresent(state.present[i], animated: false)
+            node.setPresent(state.present[i], animated: false, reduceMotion: true)
             node.isSelected = state.selected == i
+            node.isDimmed = state.dimBlocked && !state.free[i]
             board.addChild(node)
             tiles[i] = node
         }
@@ -150,60 +183,97 @@ final class SpriteBoardScene: SKScene {
     }
 }
 
-/// One tile: pre-rendered body (sides, top and shadow), face art, and a
-/// selection overlay. Positioned at the top-left of its top face.
+/// One tile: pre-rendered body (sides, top and shadow), face art, and state
+/// overlays. Positioned at the top-left of its top face.
 @MainActor
 private final class TileNode: SKNode {
-    private let highlight: SKSpriteNode
+    struct Textures {
+        let body: SKTexture
+        let bodyAnchor: CGPoint
+        let selection: SKTexture
+        let hint: SKTexture
+        let blockedFlash: SKTexture
+        let dim: SKTexture
+        let faceSize: CGSize
+    }
 
-    init(body: SKTexture, bodyAnchor: CGPoint, highlight: SKTexture, face: SKTexture, faceSize: CGSize,
-         metrics: SpriteBoardScene.Metrics) {
-        self.highlight = SKSpriteNode(texture: highlight)
+    private let selection: SKSpriteNode
+    private let hint: SKSpriteNode
+    private let blockedFlash: SKSpriteNode
+    private let dim: SKSpriteNode
+
+    init(textures: Textures, face: SKTexture, metrics: SpriteBoardScene.Metrics) {
+        func overlay(_ texture: SKTexture, z: CGFloat) -> SKSpriteNode {
+            let sprite = SKSpriteNode(texture: texture)
+            sprite.anchorPoint = CGPoint(x: 0, y: 1)
+            sprite.zPosition = z
+            sprite.alpha = 0
+            return sprite
+        }
+        dim = overlay(textures.dim, z: 0.2)
+        selection = overlay(textures.selection, z: 0.3)
+        hint = overlay(textures.hint, z: 0.4)
+        blockedFlash = overlay(textures.blockedFlash, z: 0.5)
         super.init()
 
-        let bodySprite = SKSpriteNode(texture: body)
-        bodySprite.anchorPoint = bodyAnchor
-        addChild(bodySprite)
+        let body = SKSpriteNode(texture: textures.body)
+        body.anchorPoint = textures.bodyAnchor
+        addChild(body)
 
-        let faceSprite = SKSpriteNode(texture: face, size: faceSize)
+        let faceSprite = SKSpriteNode(texture: face, size: textures.faceSize)
         faceSprite.position = CGPoint(x: metrics.tileWidth / 2, y: -metrics.tileHeight / 2)
         faceSprite.zPosition = 0.1
         addChild(faceSprite)
 
-        self.highlight.anchorPoint = CGPoint(x: 0, y: 1)
-        self.highlight.zPosition = 0.2
-        self.highlight.isHidden = true
-        addChild(self.highlight)
+        [dim, selection, hint, blockedFlash].forEach(addChild)
     }
 
     required init?(coder: NSCoder) {
         fatalError("not used")
     }
 
-    var isSelected = false {
-        didSet { highlight.isHidden = !isSelected }
+    var isAnimating: Bool {
+        hasActions() || hint.hasActions() || blockedFlash.hasActions()
     }
 
-    func setPresent(_ present: Bool, animated: Bool) {
+    var isSelected = false {
+        didSet { selection.alpha = isSelected ? 1 : 0 }
+    }
+
+    var isDimmed = false {
+        didSet { dim.alpha = isDimmed ? 1 : 0 }
+    }
+
+    func setPresent(_ present: Bool, animated: Bool, reduceMotion: Bool) {
         removeAction(forKey: "presence")
+        setScale(1)
         guard animated else {
             isHidden = !present
             alpha = 1
-            setScale(1)
             return
         }
         if present {
             isHidden = false
             alpha = 0
-            setScale(1)
             run(.fadeIn(withDuration: 0.15), withKey: "presence")
         } else {
-            let out = SKAction.group([.fadeOut(withDuration: 0.15), .scale(to: 1.04, duration: 0.15)])
+            // A slight lift as it fades, unless motion is reduced.
+            let fade = SKAction.fadeOut(withDuration: 0.15)
+            let out = reduceMotion ? fade : .group([fade, .scale(to: 1.04, duration: 0.15)])
             run(.sequence([out, .hide(), .scale(to: 1, duration: 0)]), withKey: "presence")
         }
     }
 
-    func shake(distance: CGFloat) {
+    /// Feedback for tapping a blocked tile: a tiny shake, or a brief tint when
+    /// motion is reduced.
+    func signalBlocked(distance: CGFloat, reduceMotion: Bool) {
+        if reduceMotion {
+            blockedFlash.removeAllActions()
+            blockedFlash.run(.sequence([.fadeIn(withDuration: 0.08), .fadeOut(withDuration: 0.25)]))
+            return
+        }
+        // Starting over mid-shake would leave the tile off its resting spot.
+        guard action(forKey: "shake") == nil else { return }
         let x = position.x
         let step = 0.04
         run(.sequence([
@@ -212,5 +282,15 @@ private final class TileNode: SKNode {
             .moveTo(x: x + distance / 2, duration: step * 1.5),
             .moveTo(x: x, duration: step),
         ]), withKey: "shake")
+    }
+
+    /// Two gentle glows, for the Hint button. A fade, so it suits Reduce Motion
+    /// as well.
+    func pulseHint() {
+        hint.removeAllActions()
+        let glow = SKAction.sequence([.fadeIn(withDuration: 0.2), .fadeOut(withDuration: 0.35)])
+        glow.timingMode = .easeInEaseOut
+        hint.alpha = 0
+        hint.run(.repeat(glow, count: 2))
     }
 }

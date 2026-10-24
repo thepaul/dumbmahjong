@@ -50,6 +50,20 @@ struct TileArtwork {
                 rounded(CGRect(x: pad + t, y: pad + t, width: w, height: h)).fill()
                 t -= step
             }
+            // The light comes from the upper left, so the right side sits a
+            // little deeper in shadow than the bottom. Blend softly across the
+            // corner so there's no seam.
+            cg.saveGState()
+            cg.setBlendMode(.sourceAtop)
+            let shade = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [UIColor.black.withAlphaComponent(0).cgColor,
+                         UIColor.black.withAlphaComponent(0.14).cgColor] as CFArray,
+                locations: [0, 1])!
+            cg.drawLinearGradient(shade, start: CGPoint(x: pad + w - radius, y: 0),
+                                  end: CGPoint(x: pad + w + d * 0.3, y: 0),
+                                  options: [.drawsAfterEndLocation])
+            cg.restoreGState()
             // Top face with a gentle top-left to bottom-right falloff.
             let top = rounded(CGRect(x: pad, y: pad, width: w, height: h))
             cg.saveGState()
@@ -73,15 +87,39 @@ struct TileArtwork {
         }
     }
 
-    /// Selection overlay covering the top face.
-    var highlight: UIImage {
+    /// Warm tint and outline for the selected tile.
+    var selection: UIImage {
+        overlay(fill: UIColor(red: 1, green: 0.78, blue: 0.2, alpha: 0.38),
+                stroke: UIColor(red: 0.85, green: 0.55, blue: 0.0, alpha: 0.9))
+    }
+
+    /// Cool glow for hinted tiles.
+    var hint: UIImage {
+        overlay(fill: UIColor(red: 0.55, green: 0.85, blue: 1, alpha: 0.4),
+                stroke: UIColor(red: 0.1, green: 0.5, blue: 0.85, alpha: 0.9))
+    }
+
+    /// Brief flash on a blocked tile when motion is reduced (instead of a shake).
+    var blockedFlash: UIImage {
+        overlay(fill: UIColor(red: 0.85, green: 0.2, blue: 0.15, alpha: 0.25), stroke: nil)
+    }
+
+    /// Darkens blocked tiles in "dim blocked tiles" mode.
+    var dim: UIImage {
+        overlay(fill: UIColor(red: 0.1, green: 0.08, blue: 0.0, alpha: 0.3), stroke: nil)
+    }
+
+    /// An image covering the top face, for state overlays.
+    private func overlay(fill: UIColor, stroke: UIColor?) -> UIImage {
         renderer(size: CGSize(width: w, height: h)).image { _ in
-            UIColor(red: 1, green: 0.78, blue: 0.2, alpha: 0.38).setFill()
+            fill.setFill()
             rounded(CGRect(x: 0, y: 0, width: w, height: h)).fill()
-            UIColor(red: 0.85, green: 0.55, blue: 0.0, alpha: 0.9).setStroke()
-            let outline = rounded(CGRect(x: 1, y: 1, width: w - 2, height: h - 2), radius: radius - 1)
-            outline.lineWidth = 2
-            outline.stroke()
+            if let stroke {
+                stroke.setStroke()
+                let outline = rounded(CGRect(x: 1, y: 1, width: w - 2, height: h - 2), radius: radius - 1)
+                outline.lineWidth = 2
+                outline.stroke()
+            }
         }
     }
 

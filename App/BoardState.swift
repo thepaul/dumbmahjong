@@ -3,8 +3,9 @@ import MahjongCore
 /// Everything a board renderer needs to draw the current game. Renderers diff
 /// successive states to decide what to animate.
 struct BoardState: Equatable {
-    struct Shake: Equatable {
-        let index: Int
+    /// A one-off effect on some tiles. A new serial retriggers it.
+    struct Pulse: Equatable {
+        let tiles: [Int]
         let serial: Int
     }
 
@@ -12,8 +13,13 @@ struct BoardState: Equatable {
     var layout: Layout
     var faces: [Face]
     var present: TileMask
+    var free: TileMask
     var selected: Int?
-    var shake: Shake?
+    /// A tap on a blocked tile.
+    var shake: Pulse?
+    var hint: Pulse?
+    /// Setting: draw blocked tiles darker so free ones stand out.
+    var dimBlocked = false
 
     /// Back-to-front order for 2D drawing: by layer, then along the diagonal,
     /// so tiles to the right of or below a tile cover its visible sides even
