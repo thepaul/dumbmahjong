@@ -1,0 +1,139 @@
+{
+  "id": "commons",
+  "name": "Commons",
+  "sourceSize": [
+    74.7,
+    95.1
+  ],
+  "inset": 2.75,
+  "background": "white",
+  "frameCorner": {"center": 6, "radius": 3.75},
+  "faces": {
+    "dots1": {
+      "source": "MJ1bing.svg"
+    },
+    "dots2": {
+      "source": "MJ2bing.svg"
+    },
+    "dots3": {
+      "source": "MJ3bing.svg"
+    },
+    "dots4": {
+      "source": "MJ4bing.svg"
+    },
+    "dots5": {
+      "source": "MJ5bing.svg"
+    },
+    "dots6": {
+      "source": "MJ6bing.svg"
+    },
+    "dots7": {
+      "source": "MJ7bing.svg"
+    },
+    "dots8": {
+      "source": "MJ8bing.svg"
+    },
+    "dots9": {
+      "source": "MJ9bing.svg"
+    },
+    "bamboo1": {
+      "source": "MJ1tiao.svg"
+    },
+    "bamboo2": {
+      "source": "MJ2tiao.svg"
+    },
+    "bamboo3": {
+      "source": "MJ3tiao.svg"
+    },
+    "bamboo4": {
+      "source": "MJ4tiao.svg"
+    },
+    "bamboo5": {
+      "source": "MJ5tiao.svg"
+    },
+    "bamboo6": {
+      "source": "MJ6tiao.svg"
+    },
+    "bamboo7": {
+      "source": "MJ7tiao.svg"
+    },
+    "bamboo8": {
+      "source": "MJ8tiao.svg"
+    },
+    "bamboo9": {
+      "source": "MJ9tiao.svg"
+    },
+    "characters1": {
+      "source": "MJ1wan.svg"
+    },
+    "characters2": {
+      "source": "MJ2wan.svg"
+    },
+    "characters3": {
+      "source": "MJ3wan.svg"
+    },
+    "characters4": {
+      "source": "MJ4wan.svg"
+    },
+    "characters5": {
+      "source": "MJ5wan.svg"
+    },
+    "characters6": {
+      "source": "MJ6wan.svg"
+    },
+    "characters7": {
+      "source": "MJ7wan.svg"
+    },
+    "characters8": {
+      "source": "MJ8wan.svg"
+    },
+    "characters9": {
+      "source": "MJ9wan.svg"
+    },
+    "windEast": {
+      "source": "MJEastwind.svg"
+    },
+    "windSouth": {
+      "source": "MJSouthwind.svg"
+    },
+    "windWest": {
+      "source": "MJWestwind.svg"
+    },
+    "windNorth": {
+      "source": "MJNorthwind.svg"
+    },
+    "dragonRed": {
+      "source": "MJReddragon.svg"
+    },
+    "dragonGreen": {
+      "source": "MJGreendragon.svg"
+    },
+    "dragonWhite": {
+      "source": "MJWhitedragon.svg"
+    },
+    "flowerPlum": {
+      "source": "MJmei.svg"
+    },
+    "flowerOrchid": {
+      "source": "MJlan.svg"
+    },
+    "flowerChrysanthemum": {
+      "source": "MJju.svg"
+    },
+    "flowerBamboo": {
+      "source": "MJzhu.svg"
+    },
+    "seasonSpring": {
+      "source": "MJspring.svg"
+    },
+    "seasonSummer": {
+      "source": "MJsummer.svg"
+    },
+    "seasonAutumn": {
+      "source": "MJautumn.svg"
+    },
+    "seasonWinter": {
+      "source": "MJwinter.svg"
+    }
+  }
+}

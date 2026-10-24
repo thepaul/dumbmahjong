@@ -38,9 +38,8 @@ dumbmahjong/
     Layouts/*.json      Bundled layouts (package resources)
   App/                  SwiftUI app shell (menus, settings, stats)
     BoardRenderer       Protocol, 2.5D (SpriteKit) or 3D (RealityKit)
-  Resources/
-    Tilesets/<name>/    Rasterized faces + manifest
-  tools/                Asset pipeline scripts (SVG → PNG), layout checks
+    Tilesets.xcassets   Rasterized faces per tileset (generated)
+  tools/                Asset pipeline (build_tileset.py), tileset sources
 ```
 
 The core is plain Swift, so `swift test` runs on CI without a simulator. The
@@ -188,5 +187,10 @@ Other sources considered:
 | GNOME Mahjongg / KMahjongg / Ullrich sets | GPL | Yes | Ruled out |
 | Paid packs (itch.io etc.) | Custom | Some | Private art repo only |
 
-The asset pipeline must not care which set we pick: a manifest maps the 42 face
-IDs to SVGs, and the SVGs are rasterized to PNGs at the largest needed size.
+The asset pipeline doesn't care which set we pick. `tools/tilesets/<id>/` holds
+source SVGs, `CREDITS.md`, and a manifest mapping the 42 face IDs to SVGs (plus
+how to strip each source's frame and background). `tools/build_tileset.py`
+renders them into `App/Tilesets.xcassets/<id>/` as face-only PNGs on transparent
+backgrounds, 512 px tall, plus a `tileset` data asset with name, face aspect
+ratio and credits. Generated output is committed, so building the app never
+needs the tools.
