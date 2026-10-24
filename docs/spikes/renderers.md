@@ -1,7 +1,10 @@
 # Renderer spikes: 2.5D SpriteKit vs 3D RealityKit
 
-Spikes for #11 and #12; the decision is #13. Both renderers are in the app now.
-Use the **2.5D / 3D** switch in the toolbar to flip between them on a device.
+Spikes for #11 and #12; the decision is #13.
+
+> **Decision (2026-10-24): 2.5D.** The 3D renderer was removed from `main`. Its
+> code is preserved at commit `b4b9b5b` (`App/RealityBoard/RealityBoardView.swift`)
+> if we revisit it.
 
 Both use the same contract. They get an immutable `BoardState` (layout, faces,
 which tiles remain, selection, shake requests) and report taps as tile indices.

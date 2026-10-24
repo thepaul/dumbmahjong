@@ -37,7 +37,7 @@ dumbmahjong/
     Game                State + move history (undo/redo/restart), Codable
     Layouts/*.json      Bundled layouts (package resources)
   App/                  SwiftUI app shell (menus, settings, stats)
-    BoardRenderer       Protocol, 2.5D (SpriteKit) or 3D (RealityKit)
+    SpriteBoard/        2.5D SpriteKit board renderer
     Tilesets.xcassets   Rasterized faces per tileset (generated)
   tools/                Asset pipeline (build_tileset.py), tileset sources
 ```
@@ -48,8 +48,7 @@ and reports taps as position indices. Both renderer spikes can plug into the sam
 game logic.
 
 Target: iOS 18+, Swift 6, SwiftUI app lifecycle. Code is MIT-licensed; distribution
-is via the App Store (free, no IAP). (Apple deprecated SceneKit at
-WWDC25, so the 3D path uses RealityKit.)
+is via the App Store (free, no IAP).
 
 ### Layouts
 
@@ -125,22 +124,16 @@ Support, atomic write), so killing the app never loses a game.
 
 ### Rendering
 
-How we do the 3D look is still open, so we spike both approaches against the
-same core and decide on a device:
+**2.5D SpriteKit** (chosen after spiking it against RealityKit 3D; see
+`docs/spikes/renderers.md`). Fixed oblique view like GNOME Mahjongg/Kyodai.
+Each tile is a pre-rendered Core Graphics body (rounded ivory top, extruded
+ivory-and-green sides, soft drop shadow) with the face art on top. Each layer is
+shifted a little up-left, so stacks read clearly. Draw order is `(z, x+y, x)`,
+which handles half-offset tiles correctly. Taps are hit-tested in board
+coordinates, and the front-most tile wins.
 
-- **2.5D (SpriteKit).** Fixed oblique view like GNOME Mahjongg/Kyodai. Each tile
-  is a pre-shaded body sprite (rounded bevel, bone/ivory gradient, visible side
-  faces) with the face art on top, plus a soft drop shadow. Each layer is shifted
-  a few points up-left, so stacks read clearly. Draw order is `(z, then
-  front-to-back)`. Half-offset tiles make the secondary sort tricky, so the spike
-  must validate it on the Turtle's end tiles.
-- **3D (RealityKit).** Rounded-box meshes with a PBR material (bone, wood or
-  plastic), face art as a decal texture, one key light plus ambient. Fixed camera
-  slightly tilted, maybe with a small drag-to-tilt. The z-buffer handles
-  occlusion, and taps use ray casts.
-
-Decision criteria: legibility at iPhone size, how clearly stacking reads,
-smoothness on older devices, battery use, and code complexity.
+The renderer only sees an immutable `BoardState` and reports taps as tile
+indices. Selection and matching live in `GameModel`.
 
 **Interaction:** tap a free tile to select it (tint). Tap a matching free tile to
 remove both. Tap a different non-matching free tile to move the selection. Tap a
