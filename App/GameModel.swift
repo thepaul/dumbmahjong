@@ -5,6 +5,8 @@ import Observation
 @MainActor @Observable
 final class GameModel {
     private(set) var game: Game
+    private(set) var selected: Int?
+    private(set) var shake: BoardState.Shake?
     @ObservationIgnored private let store: GameStore?
 
     init() {
@@ -17,6 +19,39 @@ final class GameModel {
         }
     }
 
+    var boardState: BoardState {
+        BoardState(
+            dealSeed: game.deal.seed, layout: game.board.layout, faces: game.board.faces,
+            present: game.board.present, selected: selected, shake: shake)
+    }
+
+    /// Handles a tap on a tile: select it, match it with the selection, or
+    /// shake it if it's blocked.
+    func tap(_ index: Int) {
+        let board = game.board
+        guard board.present[index] else { return }
+        guard board.isFree(index) else {
+            shake = BoardState.Shake(index: index, serial: (shake?.serial ?? 0) + 1)
+            return
+        }
+        if let selected, selected != index, board.faces[selected].matches(board.faces[index]) {
+            self.selected = nil
+            update { $0.remove(TilePair(selected, index)) }
+        } else {
+            selected = selected == index ? nil : index
+        }
+    }
+
+    func undo() {
+        selected = nil
+        update { $0.undo() }
+    }
+
+    func redo() {
+        selected = nil
+        update { $0.redo() }
+    }
+
     /// Applies a change to the game and saves it.
     func update(_ change: (inout Game) -> Void) {
         change(&game)
@@ -24,6 +59,7 @@ final class GameModel {
     }
 
     func newGame() {
+        selected = nil
         game = Self.freshGame()
         save()
     }
