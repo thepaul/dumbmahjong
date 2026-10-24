@@ -9,7 +9,7 @@ let package = Package(
         .library(name: "MahjongCore", targets: ["MahjongCore"]),
     ],
     targets: [
-        .target(name: "MahjongCore"),
+        .target(name: "MahjongCore", resources: [.copy("Layouts")]),
         .testTarget(name: "MahjongCoreTests", dependencies: ["MahjongCore"]),
     ]
 )

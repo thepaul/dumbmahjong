@@ -12,8 +12,7 @@ See [DESIGN.md](DESIGN.md) for the design and the
 | Path | What |
 |---|---|
 | `App/` | SwiftUI app target (an Xcode synchronized folder: new files are picked up automatically) |
-| `MahjongCore/` | Swift package with all game logic. No UIKit/SwiftUI. |
-| `Resources/Layouts/` | Board layouts (JSON) |
+| `MahjongCore/` | Swift package with all game logic. No UIKit/SwiftUI. Bundled layouts (JSON) live in `Sources/MahjongCore/Layouts/`. |
 | `Resources/Tilesets/` | Rasterized tile faces plus credits |
 | `tools/` | Asset and layout scripts |
 

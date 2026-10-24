@@ -35,10 +35,10 @@ dumbmahjong/
     DealGenerator       Seeded, solvable-by-construction deals
     Solver              Bounded DFS, used for hints and tests
     Game                State + move history (undo/redo/restart), Codable
+    Layouts/*.json      Bundled layouts (package resources)
   App/                  SwiftUI app shell (menus, settings, stats)
     BoardRenderer       Protocol, 2.5D (SpriteKit) or 3D (RealityKit)
   Resources/
-    Layouts/*.json
     Tilesets/<name>/    Rasterized faces + manifest
   tools/                Asset pipeline scripts (SVG → PNG), layout checks
 ```
@@ -57,7 +57,7 @@ WWDC25, so the 3D path uses RealityKit.)
 A layout is a list of tile positions `(x, y, z)`. `x` and `y` are in **half-tile**
 units, so a tile at `(x, y)` covers the 2×2 cells `[x, x+2) × [y, y+2)`. This
 handles the half-offset tiles that classic layouts need (such as the Turtle's
-end tiles and its peak). It is stored as JSON:
+end tiles and its peak). It is stored as JSON in `MahjongCore/Sources/MahjongCore/Layouts/`:
 
 ```json
 { "id": "turtle", "name": "Turtle", "positions": [[2,0,0], [4,0,0], ...] }
