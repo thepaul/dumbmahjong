@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: MahjongCore tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - run: swift test --package-path MahjongCore
+
+  app:
+    name: App build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild build \
+            -project DumbMahjong.xcodeproj \
+            -scheme DumbMahjong \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

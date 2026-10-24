@@ -1,0 +1,16 @@
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+build/
+
+# SwiftPM
+.build/
+.swiftpm/
+DumbMahjong.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+
+# macOS
+.DS_Store
+
+# Private art (see issue #22)
+PrivateArt/
