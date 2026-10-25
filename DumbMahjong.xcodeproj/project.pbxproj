@@ -12,6 +12,7 @@
 
 /* Begin PBXFileReference section */
 		D0000000000000000000F001 /* DumbMahjong.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DumbMahjong.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D0000000000000000000F004 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		D0000000000000000000F002 /* MahjongCore */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = MahjongCore; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -39,9 +40,18 @@
 			isa = PBXGroup;
 			children = (
 				D0000000000000000000E001 /* App */,
+				D00000000000000000001003 /* Config */,
 				D0000000000000000000F002 /* MahjongCore */,
 				D00000000000000000001002 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D00000000000000000001003 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D0000000000000000000F004 /* Base.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		D00000000000000000001002 /* Products */ = {
@@ -188,6 +198,7 @@
 		};
 		D00000000000000000005003 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D0000000000000000000F004 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -216,6 +227,7 @@
 		};
 		D00000000000000000005004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D0000000000000000000F004 /* Base.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

@@ -1,0 +1,5 @@
+// Settings for the app target. The signing team comes from the optional,
+// git-ignored Local.xcconfig, so the public repo carries nobody's team ID.
+// To run on a device, copy Local.xcconfig.example to Local.xcconfig and set
+// your own team.
+#include? "Local.xcconfig"

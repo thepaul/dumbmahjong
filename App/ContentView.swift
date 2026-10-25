@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var dealNumberText = ""
     @State private var showingStats = false
     @State private var showingSettings = false
+    @State private var showingAbout = false
 
     enum Confirmation: Identifiable {
         case newGame, restart
@@ -40,6 +41,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingStats) { StatsView(model: model) }
         .sheet(isPresented: $showingSettings) { SettingsView() }
+        .sheet(isPresented: $showingAbout) { AboutView() }
         .confirmationDialog(confirmationTitle, isPresented: isConfirming, titleVisibility: .visible,
                             presenting: confirming) { action in
             switch action {
@@ -157,6 +159,7 @@ struct ContentView: View {
             }
             Button("Statistics", systemImage: "chart.bar") { showingStats = true }
             Button("Settings", systemImage: "gearshape") { showingSettings = true }
+            Button("About", systemImage: "info.circle") { showingAbout = true }
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
@@ -252,6 +255,7 @@ struct ContentView: View {
     /// The play clock runs only while the board is in front and uncovered.
     private var clockAllowed: Bool {
         scenePhase == .active && confirming == nil && !askingForDealNumber && !showingStats && !showingSettings
+            && !showingAbout
     }
 
     /// Asks before throwing away a game in progress; otherwise just does it.
