@@ -32,3 +32,12 @@ public struct TileMask: Hashable, Sendable {
 
     public var presentCount: Int { words.reduce(0) { $0 + $1.nonzeroBitCount } }
 }
+
+extension TileMask {
+    public mutating func formUnion(_ other: TileMask) {
+        precondition(count == other.count)
+        for i in 0..<count where other[i] {
+            insert(i)
+        }
+    }
+}
