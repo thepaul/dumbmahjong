@@ -23,6 +23,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
     private var tiles: [Int: TileNode] = [:]
     private var faceTextures: [Face: SKTexture] = [:]
     private var idleFrames = 0
+    private var pending: BoardState?
     /// Size of the upright canvas the board is laid out on.
     private var canvas = CGSize.zero
     private var zoom: CGFloat = 1
@@ -67,13 +68,29 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         }
     }
 
+    /// Applies a state that arrived since the last frame. New states wait for
+    /// a live frame: the first frame after the view was paused sees the whole
+    /// idle stretch as elapsed time, and animations started before it would
+    /// jump straight to their end. Applied here, after this frame's actions
+    /// have run, new animations start cleanly on the next frame.
+    override func didFinishUpdate() {
+        if let pending {
+            self.pending = nil
+            applyNow(pending)
+        }
+    }
+
     private func wake() {
         idleFrames = 0
         view?.isPaused = false
     }
 
     func apply(_ new: BoardState) {
+        pending = new
         wake()
+    }
+
+    private func applyNow(_ new: BoardState) {
         let old = state
         state = new
         guard let old, old.dealSeed == new.dealSeed, old.layout == new.layout, old.faces == new.faces else {

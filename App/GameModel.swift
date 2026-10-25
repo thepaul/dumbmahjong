@@ -8,7 +8,16 @@ final class GameModel {
     private(set) var selected: Int?
     private(set) var shake: BoardState.Pulse?
     private(set) var hint: BoardState.Pulse?
+    private(set) var isFindingHint = false
+    /// A short message for the player, shown briefly over the board.
+    private(set) var notice: Notice?
     @ObservationIgnored private let store: GameStore?
+    @ObservationIgnored private var hintSearch: Task<Solver.Result, Never>?
+
+    struct Notice: Equatable {
+        let text: String
+        let serial: Int
+    }
 
     init() {
         store = try? GameStore.applicationSupport()
@@ -47,9 +56,62 @@ final class GameModel {
         }
     }
 
-    /// Briefly highlights a pair, for the Hint button.
-    func pulse(_ pair: TilePair) {
+    /// Finds a pair that keeps the game winnable and pulses it. If the
+    /// solver proves the game can't be won from here, says so instead.
+    func showHint() {
+        guard !isFindingHint, !game.isWon else { return }
+        let board = game.board
+        let guide = game.deal.solution
+        let search = Task.detached(priority: .userInitiated) {
+            Solver().solve(board, guide: guide)
+        }
+        hintSearch = search
+        isFindingHint = true
+        Task {
+            let result = await search.value
+            isFindingHint = false
+            // Ignore a stale answer if the board changed meanwhile.
+            guard !search.isCancelled, game.board.present == board.present else { return }
+            switch result {
+            case .solvable(let path):
+                if let move = path.first {
+                    pulse(move)
+                }
+            case .unsolvable:
+                show(board.availablePairs().isEmpty
+                     ? "No moves left. Undo to back up."
+                     : "This game can't be won from here. Undo to back up.")
+            case .unknown:
+                // Couldn't tell in time; any legal move is better than nothing.
+                if let move = board.availablePairs().first {
+                    pulse(move)
+                }
+            }
+        }
+    }
+
+    private func pulse(_ pair: TilePair) {
+        game.recordHint()
+        save()
         hint = BoardState.Pulse(tiles: [pair.a, pair.b], serial: (hint?.serial ?? 0) + 1)
+    }
+
+    private func show(_ text: String) {
+        notice = Notice(text: text, serial: (notice?.serial ?? 0) + 1)
+    }
+
+    func dismissNotice() {
+        notice = nil
+    }
+
+    /// Whether starting over would throw away a game in progress.
+    var hasProgressToLose: Bool {
+        !game.history.isEmpty && !game.isWon
+    }
+
+    func restart() {
+        selected = nil
+        update { $0.restart() }
     }
 
     func undo() {
@@ -64,14 +126,23 @@ final class GameModel {
 
     /// Applies a change to the game and saves it.
     func update(_ change: (inout Game) -> Void) {
+        cancelHint()
         change(&game)
         save()
     }
 
-    func newGame() {
+    /// Starts a new game: a random deal, or a specific deal number.
+    func newGame(seed: UInt64? = nil) {
+        cancelHint()
         selected = nil
-        game = Self.freshGame()
+        game = Self.freshGame(seed: seed)
         save()
+    }
+
+    private func cancelHint() {
+        hintSearch?.cancel()
+        hintSearch = nil
+        isFindingHint = false
     }
 
     func save() {
@@ -82,9 +153,9 @@ final class GameModel {
         }
     }
 
-    private static func freshGame() -> Game {
-        // Deal numbers are kept to nine digits so they're easy to read out.
-        let seed = UInt64.random(in: 1...999_999_999)
+    private static func freshGame(seed: UInt64? = nil) -> Game {
+        // Random deal numbers are kept to nine digits so they're easy to read out.
+        let seed = seed ?? UInt64.random(in: 1...999_999_999)
         do {
             return try Game(layout: .turtle, seed: seed)
         } catch {
