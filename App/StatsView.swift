@@ -9,9 +9,24 @@ struct StatsView: View {
     var body: some View {
         NavigationStack {
             List {
-                ForEach(Layout.bundled) { layout in
-                    Section(layout.name) {
-                        rows(model.stats.record(for: layout.id))
+                Section("All Layouts") {
+                    StatsRows(record: model.stats.overall)
+                }
+                if !played.isEmpty {
+                    Section {
+                        ForEach(played) { layout in
+                            NavigationLink {
+                                List { StatsRows(record: model.stats.record(for: layout.id)) }
+                                    .navigationTitle(layout.name)
+                                    .navigationBarTitleDisplayMode(.inline)
+                            } label: {
+                                LabeledContent(layout.name, value: summary(model.stats.record(for: layout.id)))
+                            }
+                        }
+                    } header: {
+                        Text("By Layout")
+                    } footer: {
+                        Text("Other layouts appear here once you've played them.")
                     }
                 }
                 Section {
@@ -34,7 +49,26 @@ struct StatsView: View {
         }
     }
 
-    @ViewBuilder private func rows(_ r: Stats.Record) -> some View {
+    /// Layouts with at least one game played, in menu order.
+    private var played: [MahjongCore.Layout] {
+        MahjongCore.Layout.bundled.filter { model.stats.record(for: $0.id).played > 0 }
+    }
+
+    /// "12 of 20 won · best 4:32"
+    private func summary(_ r: Stats.Record) -> String {
+        var text = "\(r.won) of \(r.played) won"
+        if let best = r.bestTime {
+            text += " · best \(formatPlayTime(seconds: best))"
+        }
+        return text
+    }
+}
+
+private struct StatsRows: View {
+    let record: Stats.Record
+
+    var body: some View {
+        let r = record
         LabeledContent("Played", value: "\(r.played)")
         LabeledContent("Won", value: "\(r.won)")
         LabeledContent("Win Rate", value: r.winRate.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? "–")

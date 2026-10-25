@@ -1,6 +1,6 @@
 import Foundation
 
-/// Win/loss records per layout.
+/// Win/loss records per layout, and across all layouts.
 ///
 /// A game counts as played once its first move is made. It ends as a win
 /// when cleared, or as abandoned when the player starts something else while
@@ -27,9 +27,24 @@ public struct Stats: Codable, Equatable, Sendable {
         public var averageTime: Double? {
             timedWins == 0 ? nil : totalWinTime / Double(timedWins)
         }
+
+        mutating func win(time: Double?) {
+            won += 1
+            currentStreak += 1
+            bestStreak = max(bestStreak, currentStreak)
+            if let time {
+                bestTime = min(bestTime ?? time, time)
+                totalWinTime += time
+                timedWins += 1
+            }
+        }
     }
 
     public var records: [String: Record] = [:]
+    /// Every game on every layout. Streaks run across layouts in the order
+    /// games were played, so this is kept alongside the per-layout records
+    /// rather than added up from them.
+    public var overall = Record()
     /// The layout of the game that has started and not yet ended, if any.
     public var openGame: String?
 
@@ -43,6 +58,7 @@ public struct Stats: Codable, Equatable, Sendable {
     public mutating func gameStarted(layoutID: String) {
         abandonOpenGame()
         records[layoutID, default: Record()].played += 1
+        overall.played += 1
         openGame = layoutID
     }
 
@@ -50,16 +66,8 @@ public struct Stats: Codable, Equatable, Sendable {
     public mutating func gameWon(layoutID: String, time: Double?) {
         guard openGame == layoutID else { return }
         openGame = nil
-        var r = records[layoutID, default: Record()]
-        r.won += 1
-        r.currentStreak += 1
-        r.bestStreak = max(r.bestStreak, r.currentStreak)
-        if let time {
-            r.bestTime = min(r.bestTime ?? time, time)
-            r.totalWinTime += time
-            r.timedWins += 1
-        }
-        records[layoutID] = r
+        records[layoutID, default: Record()].win(time: time)
+        overall.win(time: time)
     }
 
     /// The player moved on from an open game without finishing it.
@@ -67,6 +75,39 @@ public struct Stats: Codable, Equatable, Sendable {
         guard let layoutID = openGame else { return }
         openGame = nil
         records[layoutID, default: Record()].currentStreak = 0
+        overall.currentStreak = 0
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case records, overall, openGame
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        records = try c.decode([String: Record].self, forKey: .records)
+        openGame = try c.decodeIfPresent(String.self, forKey: .openGame)
+        overall = try c.decodeIfPresent(Record.self, forKey: .overall) ?? Self.combined(records)
+    }
+
+    /// Overall stats rebuilt from per-layout records, for files saved before
+    /// overall stats were kept. Streaks across layouts can't be recovered,
+    /// except when only one layout has been played.
+    static func combined(_ records: [String: Record]) -> Record {
+        if records.count == 1, let only = records.values.first {
+            return only
+        }
+        var all = Record()
+        for r in records.values {
+            all.played += r.played
+            all.won += r.won
+            all.bestStreak = max(all.bestStreak, r.bestStreak)
+            all.totalWinTime += r.totalWinTime
+            all.timedWins += r.timedWins
+            if let t = r.bestTime {
+                all.bestTime = min(all.bestTime ?? t, t)
+            }
+        }
+        return all
     }
 }
 

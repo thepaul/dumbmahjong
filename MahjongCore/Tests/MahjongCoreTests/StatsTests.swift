@@ -58,6 +58,52 @@ import Testing
         #expect(Stats().record(for: "turtle").winRate == nil)
     }
 
+    @Test func overallSpansLayouts() {
+        var stats = Stats()
+        stats.gameStarted(layoutID: "turtle")
+        stats.gameWon(layoutID: "turtle", time: 300)
+        stats.gameStarted(layoutID: "pyramid")
+        stats.gameWon(layoutID: "pyramid", time: 200)
+        stats.gameStarted(layoutID: "turtle")
+        stats.abandonOpenGame()
+        stats.gameStarted(layoutID: "pyramid")
+        stats.gameWon(layoutID: "pyramid", time: nil)
+        let all = stats.overall
+        #expect(all.played == 4 && all.won == 3)
+        #expect(all.bestStreak == 2 && all.currentStreak == 1)
+        #expect(all.bestTime == 200 && all.averageTime == 250)
+        #expect(stats.record(for: "turtle").played == 2)
+        #expect(stats.record(for: "pyramid").currentStreak == 2)
+    }
+
+    @Test func overallIsRebuiltForOldFiles() throws {
+        var turtle = Stats.Record()
+        turtle.played = 5
+        turtle.won = 3
+        turtle.currentStreak = 2
+        turtle.bestStreak = 3
+        turtle.bestTime = 250
+        turtle.totalWinTime = 900
+        turtle.timedWins = 3
+        var pyramid = Stats.Record()
+        pyramid.played = 2
+        pyramid.won = 1
+        pyramid.currentStreak = 1
+        pyramid.bestStreak = 1
+        pyramid.bestTime = 200
+        pyramid.totalWinTime = 200
+        pyramid.timedWins = 1
+        let encoder = JSONEncoder()
+        let oneLayout = try encoder.encode(["records": ["turtle": turtle]])
+        #expect(try JSONDecoder().decode(Stats.self, from: oneLayout).overall == turtle)
+
+        let twoLayouts = try encoder.encode(["records": ["turtle": turtle, "pyramid": pyramid]])
+        let all = try JSONDecoder().decode(Stats.self, from: twoLayouts).overall
+        #expect(all.played == 7 && all.won == 4)
+        #expect(all.bestStreak == 3 && all.currentStreak == 0)
+        #expect(all.bestTime == 200 && all.averageTime == 275)
+    }
+
     @Test func storeRoundTripsAndToleratesGarbage() throws {
         let url = FileManager.default.temporaryDirectory.appending(path: "stats-\(UUID().uuidString).json")
         let store = StatsStore(url: url)
