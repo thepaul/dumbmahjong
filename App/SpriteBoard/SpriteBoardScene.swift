@@ -7,8 +7,13 @@ import UIKit
 ///
 /// The view is paused whenever nothing is animating, so an idle board costs no
 /// rendering. Anything that changes what's on screen must call `wake()`.
+///
+/// Tiles live in `board`, laid out on an upright canvas. `container` centers
+/// the canvas in the scene, turns it a quarter turn when that gives much
+/// bigger tiles (a wide layout on a portrait phone), and carries pinch zoom
+/// and pan.
 @MainActor
-final class SpriteBoardScene: SKScene {
+final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
     var onTap: ((Int) -> Void)?
 
     private let tileset: Tileset
@@ -18,8 +23,18 @@ final class SpriteBoardScene: SKScene {
     private var tiles: [Int: TileNode] = [:]
     private var faceTextures: [Face: SKTexture] = [:]
     private var idleFrames = 0
+    /// Size of the upright canvas the board is laid out on.
+    private var canvas = CGSize.zero
+    private var zoom: CGFloat = 1
 
+    private let container = SKNode()
     private let board = SKNode()
+
+    /// Rotate only when upright tiles would be narrower than this…
+    static let comfortableTileWidth: CGFloat = 36
+    /// …and turning the board makes them at least this much bigger.
+    static let rotationGain: CGFloat = 1.2
+    static let maxZoom: CGFloat = 3
 
     init(tileset: Tileset) {
         self.tileset = tileset
@@ -27,7 +42,8 @@ final class SpriteBoardScene: SKScene {
         scaleMode = .resizeFill
         anchorPoint = .zero
         backgroundColor = UIColor(red: 0.12, green: 0.36, blue: 0.24, alpha: 1)
-        addChild(board)
+        container.addChild(board)
+        addChild(container)
     }
 
     required init?(coder: NSCoder) {
@@ -135,8 +151,20 @@ final class SpriteBoardScene: SKScene {
         board.removeAllChildren()
         tiles = [:]
         guard let state, size.width > 1, size.height > 1 else { return }
-        let metrics = Metrics.fitting(state.layout, in: size)
+        let upright = Metrics.fitting(state.layout, in: size)
+        let turnedSize = CGSize(width: size.height, height: size.width)
+        let turned = Metrics.fitting(state.layout, in: turnedSize)
+        let rotate = upright.tileWidth < Self.comfortableTileWidth
+            && turned.tileWidth >= upright.tileWidth * Self.rotationGain
+        let metrics = rotate ? turned : upright
         self.metrics = metrics
+        canvas = rotate ? turnedSize : size
+        // A quarter turn counterclockwise: tile tops face the left edge, so
+        // turning the phone to the usual landscape grip makes them upright.
+        container.zRotation = rotate ? .pi / 2 : 0
+        container.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        board.position = CGPoint(x: -canvas.width / 2, y: -canvas.height / 2)
+        setZoom(1, keeping: nil)
         drawOrder = BoardState.drawOrder(for: state.layout)
 
         let art = TileArtwork(metrics: metrics, scale: view?.contentScaleFactor ?? 3)
@@ -148,7 +176,7 @@ final class SpriteBoardScene: SKScene {
         for (rank, i) in drawOrder.enumerated() {
             let node = TileNode(textures: textures, face: faceTexture(state.faces[i]), metrics: metrics)
             let topLeft = metrics.topLeft(state.layout.positions[i])
-            node.position = CGPoint(x: topLeft.x, y: size.height - topLeft.y)
+            node.position = CGPoint(x: topLeft.x, y: canvas.height - topLeft.y)
             node.zPosition = CGFloat(rank)
             node.setPresent(state.present[i], animated: false, reduceMotion: true)
             node.isSelected = state.selected == i
@@ -167,12 +195,86 @@ final class SpriteBoardScene: SKScene {
         return texture
     }
 
+    // MARK: Zoom and pan
+
+    override func didMove(to view: SKView) {
+        super.didMove(to: view)
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched))
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(panned))
+        // Pinch and pan run together, like a map. Otherwise, once zoomed, the
+        // pan grabs the first finger of a pinch and the pinch never starts.
+        pinch.delegate = self
+        pan.delegate = self
+        // Both cancel the touch, so a drag never also taps a tile.
+        [pinch, pan].forEach(view.addGestureRecognizer)
+    }
+
+    @objc private func pinched(_ pinch: UIPinchGestureRecognizer) {
+        guard let view, pinch.state == .changed || pinch.state == .ended else { return }
+        wake()
+        let focus = convertPoint(fromView: pinch.location(in: view))
+        setZoom(zoom * pinch.scale, keeping: focus)
+        pinch.scale = 1
+    }
+
+    @objc private func panned(_ pan: UIPanGestureRecognizer) {
+        guard let view, pan.state == .changed || pan.state == .ended else { return }
+        wake()
+        let t = pan.translation(in: view)
+        // View coordinates grow downward; the scene's grow upward.
+        container.position.x += t.x
+        container.position.y -= t.y
+        clampPan()
+        pan.setTranslation(.zero, in: view)
+    }
+
+    /// Only pan when zoomed in; at 1× the whole board is already on screen.
+    func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        !(recognizer is UIPanGestureRecognizer) || zoom > 1
+    }
+
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    /// Sets the zoom, keeping the scene point `focus` (if given) under the
+    /// same spot on screen.
+    private func setZoom(_ newZoom: CGFloat, keeping focus: CGPoint?) {
+        let z = min(max(newZoom, 1), Self.maxZoom)
+        if let focus {
+            let local = convert(focus, to: container)
+            container.setScale(z)
+            let moved = convert(local, from: container)
+            container.position.x += focus.x - moved.x
+            container.position.y += focus.y - moved.y
+        } else {
+            container.setScale(z)
+        }
+        zoom = z
+        clampPan()
+    }
+
+    /// Keeps the zoomed board covering the view: no panning past its edges,
+    /// and centered again at 1×.
+    private func clampPan() {
+        let rotated = container.zRotation != 0
+        let extent = CGSize(
+            width: (rotated ? canvas.height : canvas.width) * zoom,
+            height: (rotated ? canvas.width : canvas.height) * zoom)
+        let slackX = max(0, (extent.width - size.width) / 2)
+        let slackY = max(0, (extent.height - size.height) / 2)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        container.position.x = min(max(container.position.x, center.x - slackX), center.x + slackX)
+        container.position.y = min(max(container.position.y, center.y - slackY), center.y + slackY)
+    }
+
     // MARK: Input
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first, let state, let metrics else { return }
-        let p = touch.location(in: self)
-        let viewPoint = CGPoint(x: p.x, y: size.height - p.y)
+        let p = touch.location(in: board)
+        let viewPoint = CGPoint(x: p.x, y: canvas.height - p.y)
         // Front-most tile under the finger wins.
         for i in drawOrder.reversed() where state.present[i] {
             if metrics.hitRect(state.layout.positions[i]).contains(viewPoint) {
