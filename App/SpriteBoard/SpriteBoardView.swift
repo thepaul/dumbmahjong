@@ -13,6 +13,8 @@ struct SpriteBoardView: View {
         Group {
             if let scene {
                 SpriteView(scene: scene, options: [.ignoresSiblingOrder])
+                    .accessibilityHidden(true)
+                    .overlay { AccessibilityLayer(view: scene.accessibility.layer) }
             } else {
                 state.tableColor.color
             }
@@ -27,4 +29,12 @@ struct SpriteBoardView: View {
             scene?.apply(new)
         }
     }
+}
+
+/// Hosts the board's accessibility layer over the SpriteKit view.
+private struct AccessibilityLayer: UIViewRepresentable {
+    let view: AccessibilityLayerView
+
+    func makeUIView(context: Context) -> AccessibilityLayerView { view }
+    func updateUIView(_ uiView: AccessibilityLayerView, context: Context) {}
 }

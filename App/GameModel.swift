@@ -1,5 +1,6 @@
 import MahjongCore
 import Observation
+import UIKit
 
 /// Owns the current game for the UI and keeps the saved copy up to date.
 @MainActor @Observable
@@ -55,13 +56,16 @@ final class GameModel {
             break
         case .blocked:
             shake = BoardState.Pulse(tiles: [index], serial: (shake?.serial ?? 0) + 1)
+            announce("Blocked")
         case .select(let i):
             selected = i
         case .deselect:
             selected = nil
         case .match(let pair):
             selected = nil
+            let name = game.board.faces[index].spokenName
             update { $0.remove(pair) }
+            announce(game.isWon ? "Board cleared" : "Matched \(name). \(tilesLeftPhrase)")
         }
     }
 
@@ -103,10 +107,12 @@ final class GameModel {
         game.recordHint()
         save()
         hint = BoardState.Pulse(tiles: [pair.a, pair.b], serial: (hint?.serial ?? 0) + 1)
+        announce("Hint: \(game.board.faces[pair.a].spokenName) and \(game.board.faces[pair.b].spokenName)")
     }
 
     private func show(_ text: String) {
         notice = Notice(text: text, serial: (notice?.serial ?? 0) + 1)
+        announce(text)
     }
 
     func dismissNotice() {
@@ -130,11 +136,24 @@ final class GameModel {
     func undo() {
         selected = nil
         update { $0.undo() }
+        announce("Undone. \(tilesLeftPhrase)")
     }
 
     func redo() {
         selected = nil
         update { $0.redo() }
+        announce("Redone. \(tilesLeftPhrase)")
+    }
+
+    private var tilesLeftPhrase: String {
+        let n = game.board.present.presentCount
+        return n == 1 ? "1 tile left" : "\(n) tiles left"
+    }
+
+    /// Speaks to VoiceOver users what sighted players see happen on the board.
+    private func announce(_ text: String) {
+        guard UIAccessibility.isVoiceOverRunning else { return }
+        UIAccessibility.post(notification: .announcement, argument: text)
     }
 
     /// Applies a change to the game, records stats, and saves.

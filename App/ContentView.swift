@@ -82,20 +82,16 @@ struct ContentView: View {
             if !model.game.isStuck {
                 hintButton
             }
-            Spacer()
-            if showTimer {
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
-                    Text(formatPlayTime(seconds: Double(model.elapsed.components.seconds)))
-                        .monospacedDigit()
-                        .foregroundStyle(.white.opacity(0.8))
+            Spacer(minLength: 0)
+            // Drop the least important parts when space runs out (narrow
+            // phones, large text), rather than wrapping or clipping.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    if showTimer { timer }
+                    status(compact: false)
                 }
-            }
-            if model.game.isStuck {
-                stuckNotice
-            } else {
-                Text("\(model.game.board.present.presentCount) left")
-                    .monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.8))
+                status(compact: false)
+                status(compact: true)
             }
             menu
         }
@@ -105,6 +101,34 @@ struct ContentView: View {
         .tint(.white)
         .padding(.horizontal)
         .padding(.vertical, 8)
+        // Like system toolbars: cap the size so everything fits, and let a
+        // long press show any button's name large instead.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityShowsLargeContentViewer()
+    }
+
+    private var timer: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            let seconds = model.elapsed.components.seconds
+            Text(formatPlayTime(seconds: Double(seconds)))
+                .monospacedDigit()
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.8))
+                .accessibilityLabel("Time, \(Duration.seconds(seconds).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide)))")
+        }
+    }
+
+    /// Tiles left, or the stuck notice. Compact drops words to save space.
+    @ViewBuilder private func status(compact: Bool) -> some View {
+        if model.game.isStuck {
+            stuckNotice(compact: compact)
+        } else {
+            Text(compact ? "\(model.game.board.present.presentCount)" : "\(model.game.board.present.presentCount) left")
+                .monospacedDigit()
+                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.8))
+                .accessibilityLabel("\(model.game.board.present.presentCount) tiles left")
+        }
     }
 
     private var hintButton: some View {
@@ -158,15 +182,19 @@ struct ContentView: View {
     /// No moves left. Deals are always solvable, so this always means an
     /// earlier pairing needs undoing; say so plainly and offer the way out.
     /// Shown in the toolbar so it never covers tiles.
-    private var stuckNotice: some View {
+    private func stuckNotice(compact: Bool) -> some View {
         HStack(spacing: 8) {
-            Text("No moves")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.primary)
+            if !compact {
+                Text("No moves")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .accessibilityLabel("No moves left")
+            }
             Button("Restart", action: model.restart)
                 .font(.callout)
                 .buttonStyle(.borderless)
                 .tint(.accentColor)
+                .accessibilityLabel(compact ? "No moves left. Restart" : "Restart")
         }
         .lineLimit(1)
         .fixedSize()
@@ -181,24 +209,33 @@ struct ContentView: View {
             VStack(spacing: 12) {
                 Text("Board cleared")
                     .font(.title2.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(winSummary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                HStack(spacing: 12) {
-                    Button("Replay Deal", action: model.restart)
-                        .buttonStyle(.bordered)
-                    Button("New Game") { model.newGame() }
-                        .buttonStyle(.borderedProminent)
+                    .fixedSize(horizontal: false, vertical: true)
+                // Side by side when they fit, stacked at large text sizes.
+                ViewThatFits {
+                    HStack(spacing: 12) { winButtons }
+                    VStack(spacing: 10) { winButtons }
                 }
                 .padding(.top, 4)
             }
+            .multilineTextAlignment(.center)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility3)
             .padding(24)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
             .shadow(color: .black.opacity(0.25), radius: 16, y: 6)
             .padding()
             .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
+    }
+
+    @ViewBuilder private var winButtons: some View {
+        Button("Replay Deal", action: model.restart)
+            .buttonStyle(.bordered)
+        Button("New Game") { model.newGame() }
+            .buttonStyle(.borderedProminent)
     }
 
     private var winSummary: String {

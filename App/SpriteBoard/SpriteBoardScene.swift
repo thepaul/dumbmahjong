@@ -24,6 +24,8 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
     private var faceTextures: [Face: SKTexture] = [:]
     private var idleFrames = 0
     private var pending: BoardState?
+    private var geometry: LayoutGeometry?
+    let accessibility = BoardAccessibility()
     /// Size of the upright canvas the board is laid out on.
     private var canvas = CGSize.zero
     private var zoom: CGFloat = 1
@@ -118,6 +120,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         if let hint = new.hint, hint != old.hint {
             hint.tiles.forEach { tiles[$0]?.pulseHint() }
         }
+        refreshAccessibility()
     }
 
     // MARK: Layout
@@ -184,6 +187,9 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         board.position = CGPoint(x: -canvas.width / 2, y: -canvas.height / 2)
         setZoom(1, keeping: nil)
         drawOrder = BoardState.drawOrder(for: state.layout)
+        if geometry?.layout != state.layout {
+            geometry = LayoutGeometry(state.layout)
+        }
 
         let art = TileArtwork(metrics: metrics, scale: view?.contentScaleFactor ?? 3)
         let textures = TileNode.Textures(
@@ -202,6 +208,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
             board.addChild(node)
             tiles[i] = node
         }
+        refreshAccessibility()
     }
 
     private func faceTexture(_ face: Face) -> SKTexture {
@@ -285,6 +292,29 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
         container.position.x = min(max(container.position.x, center.x - slackX), center.x + slackX)
         container.position.y = min(max(container.position.y, center.y - slackY), center.y + slackY)
+        refreshAccessibility()
+    }
+
+    // MARK: Accessibility
+
+    private func refreshAccessibility() {
+        guard view != nil, let state, let metrics, let geometry else { return }
+        accessibility.update(state: state, geometry: geometry, frame: { i in
+            self.viewFrame(of: metrics.hitRect(state.layout.positions[i]))
+        }, onTap: { [weak self] i in self?.onTap?(i) })
+    }
+
+    /// Converts a rect on the upright canvas (y down) to view coordinates,
+    /// through the board's rotation, zoom and pan.
+    private func viewFrame(of rect: CGRect) -> CGRect {
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY),
+        ].map { p in
+            convertPoint(toView: board.convert(CGPoint(x: p.x, y: canvas.height - p.y), to: self))
+        }
+        let xs = corners.map(\.x), ys = corners.map(\.y)
+        return CGRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
     }
 
     // MARK: Input

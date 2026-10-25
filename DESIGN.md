@@ -173,6 +173,23 @@ Settings (`@AppStorage`): show timer (off), dim blocked tiles (off), table
 color (Felt, Slate, Walnut, Charcoal), haptics on match (on), and a tile set
 picker once there's more than one set. There are no sounds.
 
+### Accessibility
+
+- **VoiceOver:** SKView publishes SpriteKit's node tree and ignores elements
+  set on it, so the board view is hidden from accessibility. A transparent,
+  touch-ignoring layer laid over it carries one element per uncovered tile
+  ("3 Bamboo, free", "Red Dragon, blocked", with the selected trait), with
+  frames that follow rotation, zoom and pan, in reading order. Double-tap
+  plays the tile, and a "Free Tiles" rotor jumps between playable tiles.
+  Matches (with the tile name and tiles left), blocked taps, undo/redo, hints
+  and notices are announced.
+- **Reduce Motion:** fades only. No lift on removal, and a tint flash instead of
+  the blocked-tile shake.
+- **Dynamic Type:** sheets and the win card scale fully (the card's buttons
+  stack when needed). The toolbar caps at xxLarge like system toolbars, with
+  the Large Content Viewer on long press, and drops the timer, then words,
+  before anything would wrap or clip.
+
 ### Tile art
 
 **Decision:** v1 ships the public-domain
