@@ -17,3 +17,4 @@ PrivateArt/
 
 # Per-developer signing team (see Config/Local.xcconfig.example)
 Config/Local.xcconfig
+__pycache__/

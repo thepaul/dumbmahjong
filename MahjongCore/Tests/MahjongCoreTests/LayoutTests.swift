@@ -22,6 +22,19 @@ import Testing
         }
     }
 
+    @Test func bundledLayoutsHaveDistinctIDsAndNames() {
+        #expect(Set(Layout.bundled.map(\.id)).count == Layout.bundled.count)
+        #expect(Set(Layout.bundled.map(\.name)).count == Layout.bundled.count)
+        #expect(Layout.bundled.first?.id == "turtle")
+    }
+
+    @Test(arguments: Layout.bundled.map(\.id))
+    func bundledLayoutUsesTheStandardSet(layoutID: String) throws {
+        // Until layouts can deal a subset of the tiles, each needs all 144.
+        let layout = try #require(Layout.bundled(id: layoutID))
+        #expect(layout.positions.count == Face.standardSet.count)
+    }
+
     @Test func positionCodesAsArray() throws {
         let data = try JSONEncoder().encode(Position(x: 1, y: 2, z: 3))
         #expect(String(decoding: data, as: UTF8.self) == "[1,2,3]")

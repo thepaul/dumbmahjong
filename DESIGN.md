@@ -64,6 +64,12 @@ end tiles and its peak). It is stored as JSON in `MahjongCore/Sources/MahjongCor
 Validation (unit test + `tools/` script): exactly 144 positions, no two tiles
 overlapping on the same layer, and every tile above layer 0 fully supported.
 
+Layouts other than the Turtle are drawn as text in `tools/layouts/*.txt`, one
+grid per layer with each character a half-tile cell, and compiled to JSON by
+`tools/build_layouts.py` (see its header for the format). Edit the drawing and
+rebuild rather than editing that JSON by hand. The designs are our own; don't
+copy coordinates from other games' layout files.
+
 **Turtle** (144 tiles), in whole-tile units (multiply by 2 for the file):
 
 | Layer | Tiles | Shape |

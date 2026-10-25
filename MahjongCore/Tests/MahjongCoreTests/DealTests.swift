@@ -36,6 +36,22 @@ import Testing
         #expect(board.isCleared)
     }
 
+    /// Every bundled layout must deal, and its solution must clear the board,
+    /// for a wide range of seeds.
+    @Test(arguments: Layout.bundled.map(\.id))
+    func bundledLayoutDealsSolvably(layoutID: String) throws {
+        let geometry = LayoutGeometry(try #require(Layout.bundled(id: layoutID)))
+        for seed in 0..<10_000 as Range<UInt64> {
+            let deal = try Deal.generate(geometry: geometry, seed: seed)
+            var board = Board(deal: deal, geometry: geometry)
+            for pair in deal.solution {
+                try #require(board.canRemove(pair), "seed \(seed)")
+                board.remove(pair)
+            }
+            #expect(board.isCleared, "seed \(seed)")
+        }
+    }
+
     @Test func usesExactlyTheStandardSet() throws {
         let deal = try Deal.generate(geometry: geometry, seed: 3)
         #expect(deal.faces.sorted { $0.rawValue < $1.rawValue }
