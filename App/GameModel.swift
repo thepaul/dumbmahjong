@@ -159,6 +159,9 @@ final class GameModel {
     /// Applies a change to the game, records stats, and saves.
     func update(_ change: (inout Game) -> Void) {
         cancelHint()
+        // A notice ("can't be won from here") describes the board before
+        // this change.
+        notice = nil
         flushClock()
         let movesBefore = game.history.count
         let wonBefore = game.isWon
@@ -179,6 +182,7 @@ final class GameModel {
     /// Starts a new game: a random deal, or a specific deal number.
     func newGame(seed: UInt64? = nil) {
         cancelHint()
+        notice = nil
         selected = nil
         endOpenGame()
         clockStarted = nil

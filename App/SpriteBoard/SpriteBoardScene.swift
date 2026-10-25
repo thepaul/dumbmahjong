@@ -55,7 +55,10 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
 
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
-        rebuild()
+        // The view resizes when the toolbar changes height (a notice or the
+        // hint spinner appears), not just on rotation; keep the player's view.
+        let kept = viewport(viewCenter: CGPoint(x: oldSize.width / 2, y: oldSize.height / 2))
+        rebuild(restoring: kept)
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -168,7 +171,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         }
     }
 
-    private func rebuild() {
+    private func rebuild(restoring kept: Viewport? = nil) {
         wake()
         board.removeAllChildren()
         tiles = [:]
@@ -187,7 +190,11 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         container.zRotation = rotate ? .pi / 2 : 0
         container.position = CGPoint(x: size.width / 2, y: size.height / 2)
         board.position = CGPoint(x: -canvas.width / 2, y: -canvas.height / 2)
-        setZoom(1, keeping: nil)
+        if let kept, kept.rotated == rotate {
+            restore(kept)
+        } else {
+            setZoom(1, keeping: nil)
+        }
         drawOrder = BoardState.drawOrder(for: state.layout)
         if geometry?.layout != state.layout {
             geometry = LayoutGeometry(state.layout)
@@ -279,6 +286,32 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
             container.setScale(z)
         }
         zoom = z
+        clampPan()
+    }
+
+    /// Where the player has zoomed and panned to, independent of the view's
+    /// size, so it survives the board being laid out again.
+    private struct Viewport {
+        let zoom: CGFloat
+        /// The board point at the center of the view, as a fraction of the canvas.
+        let focus: CGPoint
+        let rotated: Bool
+    }
+
+    /// The current zoom and pan, or nil at 1×, where there's nothing to keep.
+    private func viewport(viewCenter: CGPoint) -> Viewport? {
+        guard zoom > 1, canvas.width > 0, canvas.height > 0 else { return nil }
+        let p = board.convert(viewCenter, from: self)
+        return Viewport(
+            zoom: zoom, focus: CGPoint(x: p.x / canvas.width, y: p.y / canvas.height),
+            rotated: container.zRotation != 0)
+    }
+
+    private func restore(_ kept: Viewport) {
+        setZoom(kept.zoom, keeping: nil)
+        let focus = convert(CGPoint(x: kept.focus.x * canvas.width, y: kept.focus.y * canvas.height), from: board)
+        container.position.x += size.width / 2 - focus.x
+        container.position.y += size.height / 2 - focus.y
         clampPan()
     }
 
