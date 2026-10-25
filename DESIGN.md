@@ -159,9 +159,19 @@ button.
 
 ### Stats & settings
 
-Stats per layout: games started, won, best time, current streak. Stored as a
-small JSON/Codable file. Settings: show timer, dim blocked tiles, tile set
-(if more than one ships), background color, sounds (off by default).
+Stats per layout (`MahjongCore.Stats`, saved as JSON): played, won, win rate,
+best and average time, current and best streak. A game counts as played at its
+first move; starting something else while it's unfinished (new game, restart,
+another deal) counts as abandoning it and ends the streak.
+
+The play clock runs from the first move until the board is cleared, and only
+while the board is in front and uncovered (paused in the background and behind
+sheets and dialogs). Times are always recorded for stats; the toolbar timer and
+the time on the win card show only when the setting is on.
+
+Settings (`@AppStorage`): show timer (off), dim blocked tiles (off), table
+color (Felt, Slate, Walnut, Charcoal), haptics on match (on), and a tile set
+picker once there's more than one set. There are no sounds.
 
 ### Tile art
 

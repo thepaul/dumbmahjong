@@ -20,6 +20,7 @@ struct BoardState: Equatable {
     var hint: Pulse?
     /// Setting: draw blocked tiles darker so free ones stand out.
     var dimBlocked = false
+    var tableColor = TableColor.felt
 
     /// Back-to-front order for 2D drawing: by layer, then along the diagonal,
     /// so tiles to the right of or below a tile cover its visible sides even

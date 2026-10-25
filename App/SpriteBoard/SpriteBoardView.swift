@@ -14,7 +14,7 @@ struct SpriteBoardView: View {
             if let scene {
                 SpriteView(scene: scene, options: [.ignoresSiblingOrder])
             } else {
-                Color.felt
+                state.tableColor.color
             }
         }
         .onAppear {

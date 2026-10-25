@@ -42,7 +42,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         super.init(size: CGSize(width: 1, height: 1))
         scaleMode = .resizeFill
         anchorPoint = .zero
-        backgroundColor = UIColor(red: 0.12, green: 0.36, blue: 0.24, alpha: 1)
+        backgroundColor = TableColor.felt.uiColor
         container.addChild(board)
         addChild(container)
     }
@@ -93,6 +93,7 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
     private func applyNow(_ new: BoardState) {
         let old = state
         state = new
+        backgroundColor = new.tableColor.uiColor
         guard let old, old.dealSeed == new.dealSeed, old.layout == new.layout, old.faces == new.faces else {
             rebuild()
             return

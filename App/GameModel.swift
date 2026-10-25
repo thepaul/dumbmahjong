@@ -11,8 +11,15 @@ final class GameModel {
     private(set) var isFindingHint = false
     /// A short message for the player, shown briefly over the board.
     private(set) var notice: Notice?
+    private(set) var stats: Stats
     @ObservationIgnored private let store: GameStore?
+    @ObservationIgnored private let statsStore: StatsStore?
     @ObservationIgnored private var hintSearch: Task<Solver.Result, Never>?
+    /// When the play clock last started running, if it's running now.
+    @ObservationIgnored private var clockStarted: ContinuousClock.Instant?
+    /// Whether the screen allows the clock to run: the app is in front and
+    /// no sheet or dialog is covering the board.
+    @ObservationIgnored private var clockAllowed = false
 
     struct Notice: Equatable {
         let text: String
@@ -21,6 +28,8 @@ final class GameModel {
 
     init() {
         store = try? GameStore.applicationSupport()
+        statsStore = try? StatsStore.applicationSupport()
+        stats = statsStore?.load() ?? Stats()
         if let saved = store?.load() {
             game = saved
         } else {
@@ -111,6 +120,10 @@ final class GameModel {
 
     func restart() {
         selected = nil
+        endOpenGame()
+        // Stop the clock first, so none of the old attempt's time leaks into
+        // the fresh one.
+        clockStarted = nil
         update { $0.restart() }
     }
 
@@ -124,10 +137,23 @@ final class GameModel {
         update { $0.redo() }
     }
 
-    /// Applies a change to the game and saves it.
+    /// Applies a change to the game, records stats, and saves.
     func update(_ change: (inout Game) -> Void) {
         cancelHint()
+        flushClock()
+        let movesBefore = game.history.count
+        let wonBefore = game.isWon
         change(&game)
+        // The first move of a fresh attempt (after a deal or restart).
+        if movesBefore == 0 && game.history.count == 1 && game.undoCount == 0 {
+            stats.gameStarted(layoutID: game.deal.layoutID)
+            saveStats()
+        }
+        if game.isWon && !wonBefore {
+            stats.gameWon(layoutID: game.deal.layoutID, time: Self.seconds(game.elapsed))
+            saveStats()
+        }
+        updateClock()
         save()
     }
 
@@ -135,8 +161,73 @@ final class GameModel {
     func newGame(seed: UInt64? = nil) {
         cancelHint()
         selected = nil
+        endOpenGame()
+        clockStarted = nil
         game = Self.freshGame(seed: seed)
         save()
+    }
+
+    /// Counts an unfinished game with moves as abandoned.
+    private func endOpenGame() {
+        guard stats.openGame != nil else { return }
+        stats.abandonOpenGame()
+        saveStats()
+    }
+
+    func resetStats() {
+        let open = stats.openGame
+        stats = Stats()
+        stats.openGame = open
+        saveStats()
+    }
+
+    private func saveStats() {
+        do {
+            try statsStore?.save(stats)
+        } catch {
+            print("Couldn't save stats: \(error)")
+        }
+    }
+
+    // MARK: Play clock
+
+    /// Play time so far, including the current running stretch.
+    var elapsed: Duration {
+        game.elapsed + (clockStarted.map { ContinuousClock.now - $0 } ?? .zero)
+    }
+
+    /// Called by the screen when the board becomes visible and uncovered, or
+    /// stops being so.
+    func setClockAllowed(_ allowed: Bool) {
+        flushClock()
+        clockAllowed = allowed
+        updateClock()
+    }
+
+    /// The clock runs from the first move until the board is cleared, only
+    /// while the player can see and use the board.
+    private func updateClock() {
+        let started = !game.history.isEmpty || game.undoCount > 0 || game.elapsed > .zero
+        if clockAllowed && started && !game.isWon {
+            if clockStarted == nil {
+                clockStarted = .now
+            }
+        } else {
+            flushClock()
+            clockStarted = nil
+        }
+    }
+
+    /// Moves the running stretch into the game's saved elapsed time.
+    private func flushClock() {
+        guard let start = clockStarted else { return }
+        let now = ContinuousClock.now
+        game.elapsed += now - start
+        clockStarted = now
+    }
+
+    private static func seconds(_ d: Duration) -> Double {
+        Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
     }
 
     private func cancelHint() {
@@ -146,6 +237,7 @@ final class GameModel {
     }
 
     func save() {
+        flushClock()
         do {
             try store?.save(game)
         } catch {

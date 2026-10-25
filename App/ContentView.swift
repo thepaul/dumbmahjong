@@ -4,10 +4,16 @@ import SwiftUI
 /// The game screen: the board plus a slim toolbar.
 struct ContentView: View {
     let model: GameModel
-    @AppStorage("dimBlocked") private var dimBlocked = false
+    @AppStorage(SettingsKey.dimBlocked) private var dimBlocked = false
+    @AppStorage(SettingsKey.showTimer) private var showTimer = false
+    @AppStorage(SettingsKey.tableColor) private var tableColor = TableColor.felt
+    @AppStorage(SettingsKey.haptics) private var haptics = true
+    @Environment(\.scenePhase) private var scenePhase
     @State private var confirming: Confirmation?
     @State private var askingForDealNumber = false
     @State private var dealNumberText = ""
+    @State private var showingStats = false
+    @State private var showingSettings = false
 
     enum Confirmation: Identifiable {
         case newGame, restart
@@ -25,7 +31,15 @@ struct ContentView: View {
             toolbar
                 .animation(.easeOut(duration: 0.2), value: model.game.isStuck)
         }
-        .background(Color.felt)
+        .background(tableColor.color)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: model.game.history.count) { old, new in
+            haptics && new > old
+        }
+        .onChange(of: clockAllowed, initial: true) { _, allowed in
+            model.setClockAllowed(allowed)
+        }
+        .sheet(isPresented: $showingStats) { StatsView(model: model) }
+        .sheet(isPresented: $showingSettings) { SettingsView() }
         .confirmationDialog(confirmationTitle, isPresented: isConfirming, titleVisibility: .visible,
                             presenting: confirming) { action in
             switch action {
@@ -69,6 +83,13 @@ struct ContentView: View {
                 hintButton
             }
             Spacer()
+            if showTimer {
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(formatPlayTime(seconds: Double(model.elapsed.components.seconds)))
+                        .monospacedDigit()
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+            }
             if model.game.isStuck {
                 stuckNotice
             } else {
@@ -110,6 +131,8 @@ struct ContentView: View {
                     askingForDealNumber = true
                 }
             }
+            Button("Statistics", systemImage: "chart.bar") { showingStats = true }
+            Button("Settings", systemImage: "gearshape") { showingSettings = true }
         } label: {
             Label("More", systemImage: "ellipsis.circle")
         }
@@ -182,7 +205,16 @@ struct ContentView: View {
         let game = model.game
         let undos = game.undoCount == 1 ? "1 undo" : "\(game.undoCount) undos"
         let hints = game.hintCount == 1 ? "1 hint" : "\(game.hintCount) hints"
-        return "Deal \(String(game.deal.seed)) · \(undos) · \(hints)"
+        var parts = ["Deal \(String(game.deal.seed))", undos, hints]
+        if showTimer {
+            parts.insert(formatPlayTime(seconds: Double(game.elapsed.components.seconds)), at: 1)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The play clock runs only while the board is in front and uncovered.
+    private var clockAllowed: Bool {
+        scenePhase == .active && confirming == nil && !askingForDealNumber && !showingStats && !showingSettings
     }
 
     /// Asks before throwing away a game in progress; otherwise just does it.
@@ -211,15 +243,12 @@ struct ContentView: View {
     private var boardState: BoardState {
         var state = model.boardState
         state.dimBlocked = dimBlocked
+        state.tableColor = tableColor
         return state
     }
 }
 
-extension Color {
-    static let felt = Color(red: 0.12, green: 0.36, blue: 0.24)
-}
-
-/// White icons that stay visible on the felt when disabled, just dimmer.
+/// White icons that stay visible on the table when disabled, just dimmer.
 private struct ToolbarButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
