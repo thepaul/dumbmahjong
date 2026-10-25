@@ -8,6 +8,7 @@ struct ContentView: View {
     @AppStorage(SettingsKey.showTimer) private var showTimer = false
     @AppStorage(SettingsKey.tableColor) private var tableColor = TableColor.felt
     @AppStorage(SettingsKey.haptics) private var haptics = true
+    @AppStorage(SettingsKey.sidewaysInPortrait) private var sidewaysInPortrait = false
     @Environment(\.scenePhase) private var scenePhase
     @State private var confirming: Confirmation?
     @State private var askingForDealNumber = false
@@ -285,6 +286,7 @@ struct ContentView: View {
         var state = model.boardState
         state.dimBlocked = dimBlocked
         state.tableColor = tableColor
+        state.allowSideways = sidewaysInPortrait
         return state
     }
 }

@@ -140,11 +140,12 @@ remove both. Tap a different non-matching free tile to move the selection. Tap a
 blocked tile for a tiny shake, and nothing else. Optional setting: dim blocked
 tiles.
 
-**Screen fit:** the board scales to the largest size that fits the safe area.
-When upright tiles would be narrower than 36 pt and a quarter turn makes them
-at least 20% bigger, the whole board turns 90° counterclockwise (faces
-sideways, tops toward the left edge). In practice that means iPhone portrait
-rotates and iPad doesn't. Pinch zooms up to 3× around the pinch point; pan
+**Screen fit:** the board scales to the largest size that fits the safe area,
+upright by default. With the "Turn Board Sideways in Portrait" setting (iPhone
+only, off by default), when upright tiles would be narrower than 36 pt and a
+quarter turn makes them at least 20% bigger, the whole board turns 90°
+counterclockwise (faces sideways, tops toward the left edge). In practice that
+affects iPhone portrait only. Pinch zooms up to 3× around the pinch point; pan
 works only while zoomed; pinch and pan run together, and pinching back to 1×
 recenters. A drag cancels the touch, so it never taps a tile. Zoom is a
 fallback, not the main way to play.

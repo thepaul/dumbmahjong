@@ -7,6 +7,7 @@ enum SettingsKey {
     static let dimBlocked = "dimBlocked"
     static let tableColor = "tableColor"
     static let haptics = "haptics"
+    static let sidewaysInPortrait = "sidewaysInPortrait"
 }
 
 /// Calm table colors behind the board.

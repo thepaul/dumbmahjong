@@ -9,9 +9,9 @@ import UIKit
 /// rendering. Anything that changes what's on screen must call `wake()`.
 ///
 /// Tiles live in `board`, laid out on an upright canvas. `container` centers
-/// the canvas in the scene, turns it a quarter turn when that gives much
-/// bigger tiles (a wide layout on a portrait phone), and carries pinch zoom
-/// and pan.
+/// the canvas in the scene, turns it a quarter turn when allowed and that
+/// gives much bigger tiles (a wide layout on a portrait phone), and carries
+/// pinch zoom and pan.
 @MainActor
 final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
     var onTap: ((Int) -> Void)?
@@ -96,7 +96,8 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         let old = state
         state = new
         backgroundColor = new.tableColor.uiColor
-        guard let old, old.dealSeed == new.dealSeed, old.layout == new.layout, old.faces == new.faces else {
+        guard let old, old.dealSeed == new.dealSeed, old.layout == new.layout, old.faces == new.faces,
+              old.allowSideways == new.allowSideways else {
             rebuild()
             return
         }
@@ -175,7 +176,8 @@ final class SpriteBoardScene: SKScene, UIGestureRecognizerDelegate {
         let upright = Metrics.fitting(state.layout, in: size)
         let turnedSize = CGSize(width: size.height, height: size.width)
         let turned = Metrics.fitting(state.layout, in: turnedSize)
-        let rotate = upright.tileWidth < Self.comfortableTileWidth
+        let rotate = state.allowSideways
+            && upright.tileWidth < Self.comfortableTileWidth
             && turned.tileWidth >= upright.tileWidth * Self.rotationGain
         let metrics = rotate ? turned : upright
         self.metrics = metrics

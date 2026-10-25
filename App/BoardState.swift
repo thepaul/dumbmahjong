@@ -21,6 +21,9 @@ struct BoardState: Equatable {
     /// Setting: draw blocked tiles darker so free ones stand out.
     var dimBlocked = false
     var tableColor = TableColor.felt
+    /// Setting: turn the board a quarter turn when that makes tiles much
+    /// bigger (a wide layout on a portrait phone).
+    var allowSideways = false
 
     /// Back-to-front order for 2D drawing: by layer, then along the diagonal,
     /// so tiles to the right of or below a tile cover its visible sides even
