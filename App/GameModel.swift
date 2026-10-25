@@ -179,14 +179,15 @@ final class GameModel {
         save()
     }
 
-    /// Starts a new game: a random deal, or a specific deal number.
-    func newGame(seed: UInt64? = nil) {
+    /// Starts a new game: a random deal, or a specific deal number, on
+    /// `layout` or else the current game's layout.
+    func newGame(layout: Layout? = nil, seed: UInt64? = nil) {
         cancelHint()
         notice = nil
         selected = nil
         endOpenGame()
         clockStarted = nil
-        game = Self.freshGame(seed: seed)
+        game = Self.freshGame(layout: layout ?? game.board.layout, seed: seed)
         save()
     }
 
@@ -268,13 +269,13 @@ final class GameModel {
         }
     }
 
-    private static func freshGame(seed: UInt64? = nil) -> Game {
+    private static func freshGame(layout: Layout = .turtle, seed: UInt64? = nil) -> Game {
         // Random deal numbers are kept to nine digits so they're easy to read out.
         let seed = seed ?? UInt64.random(in: 1...999_999_999)
         do {
-            return try Game(layout: .turtle, seed: seed)
+            return try Game(layout: layout, seed: seed)
         } catch {
-            fatalError("Couldn't deal the Turtle: \(error)")
+            fatalError("Couldn't deal \(layout.name): \(error)")
         }
     }
 }

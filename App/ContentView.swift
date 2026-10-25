@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var showingStats = false
     @State private var showingSettings = false
     @State private var showingAbout = false
+    @State private var showingLayouts = false
 
     enum Confirmation: Identifiable {
         case newGame, restart
@@ -43,6 +44,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingStats) { StatsView(model: model) }
         .sheet(isPresented: $showingSettings) { SettingsView() }
         .sheet(isPresented: $showingAbout) { AboutView() }
+        .sheet(isPresented: $showingLayouts) { LayoutPickerView(model: model) }
         .confirmationDialog(confirmationTitle, isPresented: isConfirming, titleVisibility: .visible,
                             presenting: confirming) { action in
             switch action {
@@ -150,6 +152,12 @@ struct ContentView: View {
 
     private var menu: some View {
         Menu {
+            Button { showingLayouts = true } label: {
+                // Menus show the second text as a subtitle.
+                Text("Layout")
+                Text(model.game.board.layout.name)
+                Image(systemName: "square.stack.3d.up")
+            }
             Section("Deal \(String(model.game.deal.seed))") {
                 Button("Restart This Deal", systemImage: "arrow.counterclockwise") { ask(.restart) }
                     .disabled(model.game.history.isEmpty)
@@ -256,7 +264,7 @@ struct ContentView: View {
     /// The play clock runs only while the board is in front and uncovered.
     private var clockAllowed: Bool {
         scenePhase == .active && confirming == nil && !askingForDealNumber && !showingStats && !showingSettings
-            && !showingAbout
+            && !showingAbout && !showingLayouts
     }
 
     /// Asks before throwing away a game in progress; otherwise just does it.
