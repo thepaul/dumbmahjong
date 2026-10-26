@@ -102,7 +102,9 @@ extension Layout {
         bundled.first { $0.id == id }
     }
 
-    private static let bundledIDs = ["turtle", "pyramid", "fortress", "rows"]
+    private static let bundledIDs = [
+        "turtle", "pyramid", "fortress", "dragon", "spider", "cloud", "bridge", "cat", "crab", "arena", "rows",
+    ]
 
     private static func loadBundled(id: String) -> Layout {
         guard let url = Bundle.module.url(forResource: id, withExtension: "json", subdirectory: "Layouts") else {
