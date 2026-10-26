@@ -113,8 +113,13 @@ during generation) can come later.
 
 ### Solver
 
-A depth-first search over removal moves, with memoization on the
-present-tile bitset (a 144-bit key) and a node/time budget. It is used for:
+The "practical algorithm" from de Bondt, *Solving Mahjong Solitaire boards
+with peeking* (arXiv:1203.6559), with a node/time budget. It searches over each
+kind's pairing (three ways to split four tiles into two pairs) instead of over
+moves, and prunes with a relaxed game that can't be lost by choosing badly; see
+`Solver.swift`. Solving is NP-complete in general, but real boards are small
+and random, and this decides nearly every Turtle position in well under a
+second. It is used for:
 
 - **Hint:** suggest a pair that keeps the game winnable when the solver can
   show that within budget; otherwise suggest any available pair.

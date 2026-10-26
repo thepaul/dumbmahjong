@@ -52,7 +52,7 @@ import Testing
     }
 
     /// After random play the position may or may not be winnable, but the
-    /// solver should almost always be able to say which.
+    /// solver should be able to say which.
     @Test func decidesPositionsAfterRandomPlay() throws {
         var undecided = 0
         for seed in 0..<30 as Range<UInt64> {
@@ -72,7 +72,7 @@ import Testing
                 undecided += 1
             }
         }
-        #expect(undecided <= 2)
+        #expect(undecided == 0)
     }
 
     @Test func avoidsTheTrap() {

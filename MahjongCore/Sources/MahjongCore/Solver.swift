@@ -1,16 +1,26 @@
 /// Searches for a way to clear the board from its current position. Used to
 /// give hints that keep the game winnable, and to check deals in tests.
 ///
-/// Depth-first over available pairs, remembering positions already shown to
-/// be dead ends. Moves that can't hurt (removing every remaining tile of a
-/// kind when all of them are free) are taken without branching, and positions
-/// where some tile can never be paired are cut off early.
+/// Follows the "practical algorithm" of de Bondt, *Solving Mahjong Solitaire
+/// boards with peeking* (arXiv:1203.6559). Rather than searching over moves,
+/// it searches over pairings: the four remaining tiles of a kind can be split
+/// into two pairs in only three ways, and once every kind's pairing is fixed,
+/// removing any removable pair never hurts, so a greedy pass decides the rest.
+/// Kinds down to two tiles already have their pairing.
 ///
-/// Move order matters most. Given a `guide` (a known solution of the deal,
-/// such as `Deal.solution`), the solver tries tiles that come out earliest in
-/// it first; this finds a fresh deal's solution without backtracking and stays
-/// a strong hint after the player deviates. Without one it prefers moves that
-/// free the most tiles.
+/// What makes it fast is the pruning scan, a relaxed game that can't be lost
+/// by choosing badly: kinds with a pairing remove their pairs as usual, while
+/// each other kind removes any two of its tiles once both are free, then its
+/// last two one at a time. If even that can't clear the board, no real play
+/// can. Before branching, every open pairing of every kind is tried against
+/// the scan; pairings that fail are ruled out for the whole subtree, a kind
+/// left with one pairing takes it without branching, and the search branches
+/// on the kind that has had the most pairings ruled out so far, relative to
+/// how many it has left. (The paper finds critical kinds differently; this
+/// conflict count did better here.)
+///
+/// Given a `guide` (a known solution of the deal, such as `Deal.solution`),
+/// each kind tries the pairing the guide uses first.
 public struct Solver: Sendable {
     public enum Result: Equatable, Sendable {
         /// A sequence of moves that clears the board.
@@ -20,10 +30,11 @@ public struct Solver: Sendable {
         case unknown
     }
 
+    /// The most branching points to visit before giving up.
     public var maxNodes: Int
     public var timeLimit: Duration
 
-    public init(maxNodes: Int = 300_000, timeLimit: Duration = .seconds(2)) {
+    public init(maxNodes: Int = 100_000, timeLimit: Duration = .seconds(2)) {
         self.maxNodes = maxNodes
         self.timeLimit = timeLimit
     }
@@ -31,13 +42,65 @@ public struct Solver: Sendable {
     public func solve(_ board: Board, guide: [TilePair]? = nil) -> Result {
         var search = Search(board: board, guide: guide, maxNodes: maxNodes,
                             deadline: ContinuousClock.now.advanced(by: timeLimit))
-        var path: [TilePair] = []
-        switch search.run(board.present, path: &path) {
-        case .solved: return .solvable(path)
+        var pairing = search.initialPairing
+        var ruledOut = Array(repeating: UInt8(0), count: search.kinds.count)
+        switch search.run(&pairing, ruledOut: &ruledOut) {
+        case .solved: return .solvable(search.removalOrder(pairing))
         case .dead: return .unsolvable
         case .gaveUp: return .unknown
         }
     }
+}
+
+/// Up to 256 tiles as a fixed-size bitset, so the scan never allocates.
+private struct Bits: Equatable {
+    var w0: UInt64 = 0, w1: UInt64 = 0, w2: UInt64 = 0, w3: UInt64 = 0
+
+    static let capacity = 256
+
+    init() {}
+
+    init(_ indices: some Sequence<Int>) {
+        for i in indices {
+            insert(i)
+        }
+    }
+
+    subscript(i: Int) -> Bool {
+        let bit = UInt64(1) << UInt64(i & 63)
+        switch i >> 6 {
+        case 0: return w0 & bit != 0
+        case 1: return w1 & bit != 0
+        case 2: return w2 & bit != 0
+        default: return w3 & bit != 0
+        }
+    }
+
+    mutating func insert(_ i: Int) {
+        let bit = UInt64(1) << UInt64(i & 63)
+        switch i >> 6 {
+        case 0: w0 |= bit
+        case 1: w1 |= bit
+        case 2: w2 |= bit
+        default: w3 |= bit
+        }
+    }
+
+    mutating func remove(_ i: Int) {
+        let bit = ~(UInt64(1) << UInt64(i & 63))
+        switch i >> 6 {
+        case 0: w0 &= bit
+        case 1: w1 &= bit
+        case 2: w2 &= bit
+        default: w3 &= bit
+        }
+    }
+
+    func intersects(_ other: Bits) -> Bool {
+        (w0 & other.w0) | (w1 & other.w1) | (w2 & other.w2) | (w3 & other.w3) != 0
+    }
+
+    var isEmpty: Bool { (w0 | w1 | w2 | w3) == 0 }
 }
 
 private struct Search {
@@ -45,153 +108,227 @@ private struct Search {
         case solved, dead, gaveUp
     }
 
+    /// The three ways to split four tiles into two pairs, as the partner of
+    /// each of the four positions.
+    static let partners: [[Int]] = [[1, 0, 3, 2], [2, 3, 0, 1], [3, 2, 1, 0]]
+
     let geometry: LayoutGeometry
-    /// Tiles that can match each other share a key.
-    let keys: [Int]
-    let keyCount: Int
-    /// Every tile that must be gone before this one can be free from above.
-    let cones: [TileMask]
-    /// Position of each tile in the guide's removal order, if there is one.
-    let rank: [Int]?
+    let start: Bits
+    let above: [Bits]
+    let left: [Bits]
+    let right: [Bits]
+    /// Remaining tiles of each kind that matter: two or four.
+    let kinds: [[Int]]
+    /// Which kind each tile belongs to, and its place within the kind.
+    let kindOf: [Int]
+    let placeOf: [Int]
+    /// The guide's pairing of each four-tile kind, if it has one.
+    let preferred: [Int?]
+    /// Pairing per kind before any search: fixed (0) for two-tile kinds,
+    /// open (-1) for four.
+    let initialPairing: [Int]
     let maxNodes: Int
     let deadline: ContinuousClock.Instant
     var nodes = 0
-    var deadEnds: Set<TileMask> = []
+    var scans = 0
+    /// How often each kind has had a pairing ruled out, anywhere in the search.
+    var conflicts: [Int]
 
     init(board: Board, guide: [TilePair]?, maxNodes: Int, deadline: ContinuousClock.Instant) {
+        precondition(board.faces.count <= Bits.capacity, "layout too large for the solver")
         geometry = board.geometry
-        let caseCount = Face.allCases.count
-        keys = board.faces.map { face in
-            switch face.bonus {
-            case .flower: caseCount
-            case .season: caseCount + 1
-            case nil: Face.allCases.firstIndex(of: face)!
-            }
-        }
-        keyCount = caseCount + 2
-
-        // Build cones from the top layer down, so each tile's cone can reuse
-        // the cones of the tiles directly above it.
         let count = board.faces.count
-        var cones = Array(repeating: TileMask(count: count, allPresent: false), count: count)
-        let order = (0..<count).sorted { board.layout.positions[$0].z > board.layout.positions[$1].z }
-        for i in order {
-            for j in geometry.above[i] {
-                cones[i].insert(j)
-                cones[i].formUnion(cones[j])
-            }
-        }
-        self.cones = cones
+        let present = (0..<count).filter { board.present[$0] }
+        start = Bits(present)
+        above = geometry.above.map(Bits.init)
+        left = geometry.left.map(Bits.init)
+        right = geometry.right.map(Bits.init)
 
-        if let guide {
-            var rank = Array(repeating: guide.count, count: count)
-            for (n, pair) in guide.enumerated() {
-                rank[pair.a] = n
-                rank[pair.b] = n
+        var kinds: [[Int]] = []
+        for i in present {
+            if let k = kinds.firstIndex(where: { board.faces[$0[0]].matches(board.faces[i]) }) {
+                kinds[k].append(i)
+            } else {
+                kinds.append([i])
             }
-            self.rank = rank
-        } else {
-            rank = nil
         }
+        var kindOf = Array(repeating: -1, count: count)
+        var placeOf = Array(repeating: -1, count: count)
+        for (k, tiles) in kinds.enumerated() {
+            for (n, i) in tiles.enumerated() {
+                kindOf[i] = k
+                placeOf[i] = n
+            }
+        }
+        precondition(kinds.allSatisfy { $0.count == 2 || $0.count == 4 }, "kinds come in twos and fours")
+        self.kinds = kinds
+        self.kindOf = kindOf
+        self.placeOf = placeOf
+        initialPairing = kinds.map { $0.count == 4 ? -1 : 0 }
+
+        var preferred = Array(repeating: Int?.none, count: kinds.count)
+        for pair in guide ?? [] where board.present[pair.a] && board.present[pair.b] {
+            let k = kindOf[pair.a]
+            guard kinds[k].count == 4, kindOf[pair.b] == k else { continue }
+            preferred[k] = Self.partners.firstIndex { $0[placeOf[pair.a]] == placeOf[pair.b] }
+        }
+        self.preferred = preferred
+        conflicts = Array(repeating: 0, count: kinds.count)
         self.maxNodes = maxNodes
         self.deadline = deadline
     }
 
-    mutating func run(_ start: TileMask, path: inout [TilePair]) -> Outcome {
-        var present = start
-        let mark = path.count
-        takeSafeMoves(&present, path: &path)
-        if present.isEmpty {
-            return .solved
-        }
-        if deadEnds.contains(present) || hasStrandedTile(present) {
-            path.removeSubrange(mark...)
-            return .dead
-        }
+    /// Searches for pairings that clear the board, filling in `pairing`.
+    /// `ruledOut` holds, per kind, a bit for each pairing known to fail.
+    mutating func run(_ pairing: inout [Int], ruledOut: inout [UInt8]) -> Outcome {
         nodes += 1
-        if nodes > maxNodes || (nodes % 512 == 0 && (ContinuousClock.now > deadline || Task.isCancelled)) {
-            path.removeSubrange(mark...)
+        if nodes > maxNodes || ContinuousClock.now > deadline || Task.isCancelled {
             return .gaveUp
         }
+        guard scan(pairing) else { return .dead }
 
-        for move in orderedMoves(present) {
-            var next = present
-            next.remove(move.a)
-            next.remove(move.b)
-            path.append(move)
-            switch run(next, path: &path) {
-            case .solved:
-                return .solved
-            case .gaveUp:
-                path.removeSubrange(mark...)
-                return .gaveUp
-            case .dead:
-                path.removeLast()
-            }
-        }
-        deadEnds.insert(present)
-        path.removeSubrange(mark...)
-        return .dead
-    }
-
-    /// Present tiles grouped by key.
-    func groups(_ present: TileMask) -> [[Int]] {
-        var groups = Array(repeating: [Int](), count: keyCount)
-        for i in 0..<keys.count where present[i] {
-            groups[keys[i]].append(i)
-        }
-        return groups
-    }
-
-    /// Removes every kind whose remaining tiles (two or four) are all free.
-    /// No other pairing exists for those tiles, so this never loses a win.
-    func takeSafeMoves(_ present: inout TileMask, path: inout [TilePair]) {
+        // Rule out pairings the scan rejects, settling any kind left with one,
+        // until nothing changes; remember the kind with the fewest left.
+        var branch = -1
         var changed = true
         while changed {
             changed = false
-            for group in groups(present) where !group.isEmpty && group.count % 2 == 0 {
-                guard group.allSatisfy({ geometry.isFree($0, in: present) }) else { continue }
-                for n in stride(from: 0, to: group.count, by: 2) {
-                    let pair = TilePair(group[n], group[n + 1])
-                    present.remove(pair.a)
-                    present.remove(pair.b)
-                    path.append(pair)
+            branch = -1
+            var best = 0.0
+            for k in kinds.indices where pairing[k] < 0 {
+                for p in 0..<3 where ruledOut[k] & (1 << p) == 0 {
+                    pairing[k] = p
+                    if !scan(pairing) {
+                        ruledOut[k] |= 1 << p
+                        conflicts[k] += 1
+                    }
+                    pairing[k] = -1
                 }
-                changed = true
+                let left = (0..<3).filter { ruledOut[k] & (1 << $0) == 0 }
+                switch left.count {
+                case 0:
+                    return .dead
+                case 1:
+                    pairing[k] = left[0]
+                    changed = true
+                default:
+                    let score = Double(conflicts[k] + 1) / Double(left.count)
+                    if score > best {
+                        best = score
+                        branch = k
+                    }
+                }
+            }
+            if scans > 4096 {
+                scans = 0
+                if ContinuousClock.now > deadline || Task.isCancelled {
+                    return .gaveUp
+                }
             }
         }
-    }
+        // Every kind has a pairing and the scan passed, so it's exact.
+        guard branch >= 0 else { return .solved }
 
-    /// A tile is stranded when every other remaining tile of its kind sits
-    /// somewhere above it: they must all go before it's free, leaving it with
-    /// no partner.
-    func hasStrandedTile(_ present: TileMask) -> Bool {
-        for group in groups(present) where group.count >= 2 {
-            for t in group where group.allSatisfy({ $0 == t || cones[t][$0] }) {
-                return true
+        var options = (0..<3).filter { ruledOut[branch] & (1 << $0) == 0 }
+        if let p = preferred[branch], let n = options.firstIndex(of: p) {
+            options.swapAt(0, n)
+        }
+        for p in options {
+            var childPairing = pairing
+            var childRuledOut = ruledOut
+            childPairing[branch] = p
+            switch run(&childPairing, ruledOut: &childRuledOut) {
+            case .solved:
+                pairing = childPairing
+                return .solved
+            case .gaveUp:
+                return .gaveUp
+            case .dead:
+                // Pairings this one ruled out may still work with another.
+                ruledOut[branch] |= 1 << p
             }
         }
-        return false
+        return .dead
     }
 
-    func orderedMoves(_ present: TileMask) -> [TilePair] {
-        let free = geometry.freeTiles(in: present)
-        var moves: [(pair: TilePair, score: Int)] = []
-        for (n, i) in free.enumerated() {
-            for j in free[(n + 1)...] where keys[i] == keys[j] {
-                let score: Int
-                if let rank {
-                    // Earliest in the guide first.
-                    score = -max(rank[i], rank[j])
+    func isFree(_ i: Int, in present: Bits) -> Bool {
+        !above[i].intersects(present) && (!left[i].intersects(present) || !right[i].intersects(present))
+    }
+
+    /// The pruning scan: whether the board can be cleared when kinds with a
+    /// pairing play by it and the others relax as described above. With every
+    /// pairing fixed there is nothing left to relax, and this is exact.
+    mutating func scan(_ pairing: [Int]) -> Bool {
+        scans += 1
+        var present = start
+        // Open kinds that have already given up their first two tiles.
+        var split = Bits()
+        var progress = true
+        while progress && !present.isEmpty {
+            progress = false
+            var free = Bits()
+            for k in kinds.indices {
+                for i in kinds[k] where present[i] && isFree(i, in: present) {
+                    free.insert(i)
+                }
+            }
+            for k in kinds.indices {
+                let tiles = kinds[k]
+                if pairing[k] >= 0 {
+                    let partner = Self.partners[pairing[k]]
+                    for n in tiles.indices where free[tiles[n]] && present[tiles[n]] {
+                        let m = partner[n]
+                        if free[tiles[m]] {
+                            present.remove(tiles[n])
+                            present.remove(tiles[m])
+                            progress = true
+                        }
+                    }
+                } else if split[k] {
+                    for i in tiles where free[i] && present[i] {
+                        present.remove(i)
+                        progress = true
+                    }
                 } else {
-                    var next = present
-                    next.remove(i)
-                    next.remove(j)
-                    score = geometry.freeTiles(in: next).count
+                    var first = -1
+                    for i in tiles where free[i] {
+                        if first < 0 {
+                            first = i
+                        } else {
+                            present.remove(first)
+                            present.remove(i)
+                            split.insert(k)
+                            progress = true
+                            break
+                        }
+                    }
                 }
-                moves.append((TilePair(i, j), score))
             }
         }
-        return moves.sorted { $0.score > $1.score }.map(\.pair)
+        return present.isEmpty
+    }
+
+    /// An order of moves that clears the board with every kind's pairing
+    /// fixed: repeatedly remove whichever pairs are free.
+    func removalOrder(_ pairing: [Int]) -> [TilePair] {
+        var present = start
+        var order: [TilePair] = []
+        while !present.isEmpty {
+            let before = order.count
+            let free = Bits((0..<kindOf.count).filter { present[$0] && isFree($0, in: present) })
+            for (k, tiles) in kinds.enumerated() {
+                let partner = Self.partners[pairing[k]]
+                for n in tiles.indices {
+                    let m = partner[n]
+                    if n < m && free[tiles[n]] && free[tiles[m]] && present[tiles[n]] {
+                        present.remove(tiles[n])
+                        present.remove(tiles[m])
+                        order.append(TilePair(tiles[n], tiles[m]))
+                    }
+                }
+            }
+            precondition(order.count > before, "pairing doesn't clear the board")
+        }
+        return order
     }
 }
