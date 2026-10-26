@@ -136,18 +136,21 @@ struct ContentView: View {
         }
     }
 
+    /// The spinner covers the button rather than replacing it, so the toolbar
+    /// keeps its size. A resize rebuilds the board, which would cut off the
+    /// hint glow that starts as the spinner goes away.
     private var hintButton: some View {
-        Group {
-            if model.isFindingHint {
-                ProgressView()
-                    .tint(.white)
-            } else {
-                Button("Hint", systemImage: "lightbulb", action: model.showHint)
-                    .disabled(model.game.isWon)
-                    .keyboardShortcut("h", modifiers: [])
+        Button("Hint", systemImage: "lightbulb", action: model.showHint)
+            .disabled(model.game.isWon || model.isFindingHint)
+            .keyboardShortcut("h", modifiers: [])
+            .opacity(model.isFindingHint ? 0 : 1)
+            .overlay {
+                if model.isFindingHint {
+                    ProgressView()
+                        .tint(.white)
+                }
             }
-        }
-        .frame(minWidth: 28)
+            .frame(minWidth: 28)
     }
 
     private var menu: some View {
