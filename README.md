@@ -30,7 +30,11 @@ python3 -I tools/build_icon.py      # app icon, from the tileset's red dragon
 ```
 
 ```sh
-# Core logic tests (no simulator needed)
+# Core logic tests (no simulator needed). Release mode runs them in seconds
+# instead of minutes; -enable-testing is needed for a release test build.
+swift test --package-path MahjongCore -c release -Xswiftc -enable-testing
+
+# The same in debug, which is slow but better for tracking down a failure
 swift test --package-path MahjongCore
 
 # App build

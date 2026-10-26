@@ -12,7 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version
-      - run: swift test --package-path MahjongCore
+      # Release mode: the solver and deal tests are many times slower in debug.
+      - run: swift test --package-path MahjongCore -c release -Xswiftc -enable-testing
 
   app:
     name: App build
