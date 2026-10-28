@@ -171,10 +171,15 @@ button.
 
 ### Stats & settings
 
-Stats per layout (`MahjongCore.Stats`, saved as JSON): played, won, win rate,
-best and average time, current and best streak. A game counts as played at its
-first move; starting something else while it's unfinished (new game, restart,
-another deal) counts as abandoning it and ends the streak.
+Stats per layout and overall (`MahjongCore.Stats`, saved as JSON): played, won,
+win rate, best and average time, current and best streak. The overall record is
+kept alongside the per-layout ones rather than added up from them, because a
+streak runs across layouts in the order games were played. A game counts as
+played at its first move; starting something else while it's unfinished (new
+game, restart, another deal) counts as abandoning it and ends the streak.
+
+The Statistics screen leads with the overall record, then lists each layout
+played so far with a one-line summary that opens its full record.
 
 The play clock runs from the first move until the board is cleared, and only
 while the board is in front and uncovered (paused in the background and behind
